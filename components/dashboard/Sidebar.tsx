@@ -27,7 +27,7 @@ export function Sidebar() {
 
   const settingsItems = [
     { name: "Hesab", href: "/settings/account" },
-    { name: "Tema", href: "/settings/theme" },
+    // { name: "Tema", href: "/settings/theme" },
     { name: "Dil", href: "/settings/language" },
   ];
 

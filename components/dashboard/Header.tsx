@@ -35,7 +35,7 @@ export function Header() {
 
       {/* Right: Theme Toggle + User Menu */}
       <div className="flex items-center gap-4 ml-auto">
-        <ThemeToggle />
+        {/* <ThemeToggle /> */}
 
         {/* User Menu */}
         <div className="relative">

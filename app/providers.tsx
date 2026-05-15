@@ -10,7 +10,12 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <ThemeProvider attribute="attribute" defaultTheme="light" enableSystem>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      storageKey="theme"
+      disableTransitionOnChange
+    >
       <AuthProvider>{children}</AuthProvider>
     </ThemeProvider>
   );
