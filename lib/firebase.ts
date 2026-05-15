@@ -1,5 +1,6 @@
-import { initializeApp, getApps, FirebaseApp } from "firebase/app";
-import { getAuth as getFirebaseAuth, Auth } from "firebase/auth";
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,7 +11,6 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Validate Firebase config
 if (!firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId) {
   console.error('Firebase configuration is incomplete:', {
     apiKey: !!firebaseConfig.apiKey,
@@ -21,25 +21,16 @@ if (!firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.proj
 
 export { firebaseConfig };
 
-// Initialize Firebase and get app instance
 let app: FirebaseApp;
 try {
   const apps = getApps();
-  if (apps.length === 0) {
-    console.log('Initializing Firebase app');
-    app = initializeApp(firebaseConfig);
-  } else {
-    app = apps[0];
-  }
+  app = apps.length === 0 ? initializeApp(firebaseConfig) : apps[0];
 } catch (error) {
-  console.error("Firebase initialization error:", error);
+  console.error('Firebase initialization error:', error);
   throw error;
 }
 
 export { app };
 
-// Get Auth instance
-export const auth: Auth = getFirebaseAuth(app);
-
-
-
+export const auth: Auth = getAuth(app);
+export const db: Firestore = getFirestore(app);

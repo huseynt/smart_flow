@@ -5,6 +5,7 @@
 
 'use client';
 
+import { useDistributionProfile } from '@/hooks/useDistributionProfile';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useRole } from '@/hooks/useRole';
 import { UserRole } from '@/types';
@@ -14,6 +15,12 @@ import { useEffect } from 'react';
 export default function DistributionDashboardPage() {
   const router = useRouter();
   const role = useRole();
+  const distributionProfile = useDistributionProfile();
+
+
+  useEffect(() => {
+    console.log(distributionProfile);
+  }, [distributionProfile]);
 
   // Protect and ensure user is distribution
   useEffect(() => {
@@ -38,7 +45,7 @@ export default function DistributionDashboardPage() {
       {/* Placeholder Content */}
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-8 border border-gray-200 dark:border-gray-800 text-center">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-          Qruquzastırılıyor
+          //////////////////
         </h2>
         <p className="text-gray-600 dark:text-gray-400">
           Paylamalar paneli tezliklə aktiv olacaq

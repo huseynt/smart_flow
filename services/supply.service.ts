@@ -1,18 +1,21 @@
 /**
  * Supply Service
- * Handles supply user profile operations
+ * Handles supply user profile operations via Firestore
  */
 
 import { SupplyUser, UpdateProfileFormData } from '@/types';
-import { handleDataConnectError, executeMutation, executeQuery, getDataConnectInstance } from '@/lib/dataConnect';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 
 /**
- * Create a new supply user profile
+ * Create a new supply user profile in Firestore "supply_users" collection
  * Called after user creation during registration
- * 
- * @param firebaseUid - Firebase UID (used to link with user record)
- * @param data - Supply user data
- * @returns Created supply user
  */
 export async function createSupplyUser(
   firebaseUid: string,
@@ -26,166 +29,112 @@ export async function createSupplyUser(
     image_url?: string;
   }
 ): Promise<SupplyUser> {
-  try {
-    console.log('Supply Service: createSupplyUser called for firebase UID:', firebaseUid);
-    
-    // Create supply user object to return
-    const newSupplyUser: SupplyUser = {
-      id: crypto.randomUUID(),
-      user_id: firebaseUid,
-      ...data,
-      image_url: data.image_url || null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+  console.log('Supply Service: createSupplyUser called for UID:', firebaseUid);
 
-    // Try to save to Firebase SQL via Data Connect
-    try {
-      const dataConnect = getDataConnectInstance();
-      
-      if (dataConnect) {
-        const { mutationRef } = require('@firebase/data-connect');
-        const createSupplyUserMutation = mutationRef(dataConnect, 'CreateSupplyUser');
-        
-        const result = await executeMutation(createSupplyUserMutation, {
-          firebaseUid,
-          firstName: data.first_name,
-          lastName: data.last_name,
-          companyName: data.company_name,
-          address: data.address,
-          phone: data.phone,
-          voen: data.voen,
-          imageUrl: data.image_url || null,
-        });
-        
-        if (result) {
-          console.log('Supply Service: Supply user created in Firebase SQL:', firebaseUid);
-          // Map Firebase SQL response to our format
-          const supplyData = result.supplyUser || result;
-          newSupplyUser.created_at = supplyData.createdAt || newSupplyUser.created_at;
-          newSupplyUser.updated_at = supplyData.updatedAt || newSupplyUser.updated_at;
-        }
-      } else {
-        console.warn('Data Connect not initialized, skipping SQL save');
-      }
-    } catch (dataConnectError) {
-      console.warn('Failed to save supply user to Firebase SQL, falling back to localStorage:', dataConnectError);
-    }
-    
-    // Always store in localStorage as fallback
-    try {
-      const supplyUsers = JSON.parse(localStorage.getItem('supply_users') || '{}');
-      supplyUsers[firebaseUid] = newSupplyUser;
-      localStorage.setItem('supply_users', JSON.stringify(supplyUsers));
-      localStorage.setItem(`supply_user_${firebaseUid}`, JSON.stringify(newSupplyUser));
-      console.log('Supply Service: Supply user stored in localStorage (fallback):', newSupplyUser.id);
-    } catch (e) {
-      console.warn('localStorage not available:', e);
-    }
-    
-    return newSupplyUser;
-  } catch (error) {
-    console.error('Error creating supply user:', error);
-    throw new Error(handleDataConnectError(error));
-  }
+  const now = new Date().toISOString();
+
+  const newSupplyUser: SupplyUser = {
+    id: firebaseUid,
+    user_id: firebaseUid,
+    first_name: data.first_name,
+    last_name: data.last_name,
+    company_name: data.company_name,
+    address: data.address,
+    phone: data.phone,
+    voen: data.voen,
+    image_url: data.image_url || null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  await setDoc(doc(db, 'supply_users', firebaseUid), {
+    user_id: firebaseUid,
+    first_name: data.first_name,
+    last_name: data.last_name,
+    company_name: data.company_name,
+    address: data.address,
+    phone: data.phone,
+    voen: data.voen,
+    image_url: data.image_url || null,
+    created_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
+  });
+
+  console.log('Supply Service: Supply user created in Firestore:', firebaseUid);
+  return newSupplyUser;
 }
 
 /**
- * Get supply user profile by firebase UID
- * 
- * @param firebaseUid - Firebase UID
- * @returns Supply user or null
+ * Get supply user profile by Firebase UID
  */
-export async function getSupplyUser(firebaseUid: string): Promise<SupplyUser | null> {
-  try {
-    console.log('Supply Service: getSupplyUser called for firebase UID:', firebaseUid);
-    
-    // Try to fetch from Firebase SQL
-    try {
-      const dataConnect = getDataConnectInstance();
-      
-      if (dataConnect) {
-        const { queryRef } = require('@firebase/data-connect');
-        const getSupplyUserQuery = queryRef(dataConnect, 'GetSupplyUser');
-        
-        const result = await executeQuery(getSupplyUserQuery, {
-          firebaseUid,
-        });
-        
-        if (result) {
-          console.log('Supply Service: Supply user found in Firebase SQL:', firebaseUid);
-          // Data Connect returns supply user data directly from the query
-          const supplyData = result.supplyUser || result;
-          return {
-            id: crypto.randomUUID(),
-            user_id: supplyData.user?.firebaseUid || firebaseUid,
-            first_name: supplyData.firstName,
-            last_name: supplyData.lastName,
-            company_name: supplyData.companyName,
-            address: supplyData.address,
-            phone: supplyData.phone,
-            voen: supplyData.voen,
-            image_url: supplyData.imageUrl || null,
-            created_at: supplyData.createdAt,
-            updated_at: supplyData.updatedAt,
-          };
-        }
-      }
-    } catch (dataConnectError) {
-      console.warn('Failed to fetch from Firebase SQL, checking localStorage:', dataConnectError);
-    }
-    
-    // Check localStorage as fallback
-    try {
-      const userData = localStorage.getItem(`supply_user_${firebaseUid}`);
-      if (userData) {
-        const user = JSON.parse(userData) as SupplyUser;
-        console.log('Supply Service: Supply user found in localStorage:', user.id);
-        return user;
-      }
-    } catch (e) {
-      console.warn('localStorage not available:', e);
-    }
+export async function getSupplyUser(
+  firebaseUid: string
+): Promise<SupplyUser | null> {
+  console.log('Supply Service: getSupplyUser called for UID:', firebaseUid);
 
-    console.log('Supply Service: Supply user not found');
+  const snap = await getDoc(doc(db, 'supply_users', firebaseUid));
+
+  if (!snap.exists()) {
+    console.log('Supply Service: Supply user not found:', firebaseUid);
     return null;
-  } catch (error) {
-    console.error('Error getting supply user:', error);
-    throw new Error(handleDataConnectError(error));
   }
+
+  const data = snap.data();
+  console.log('Supply Service: Supply user found in Firestore:', firebaseUid);
+
+  return {
+    id: firebaseUid,
+    user_id: firebaseUid,
+    first_name: data.first_name,
+    last_name: data.last_name,
+    company_name: data.company_name,
+    address: data.address,
+    phone: data.phone,
+    voen: data.voen,
+    image_url: data.image_url || null,
+    created_at: data.created_at?.toDate?.().toISOString() ?? data.created_at,
+    updated_at: data.updated_at?.toDate?.().toISOString() ?? data.updated_at,
+  };
 }
 
 /**
  * Update supply user profile
- * 
- * @param firebaseUid - Firebase UID
- * @param data - Fields to update
- * @returns Updated supply user
  */
 export async function updateSupplyUser(
   firebaseUid: string,
   data: Partial<UpdateProfileFormData>
 ): Promise<SupplyUser> {
-  try {
-    // TODO: Implement Data Connect mutation
-    throw new Error('Not implemented');
-  } catch (error) {
-    console.error('Error updating supply user:', error);
-    throw new Error(handleDataConnectError(error));
-  }
+  const updateData: Record<string, unknown> = {
+    updated_at: serverTimestamp(),
+  };
+
+  if ('first_name' in data && data.first_name !== undefined)
+    updateData.first_name = data.first_name;
+  if ('last_name' in data && data.last_name !== undefined)
+    updateData.last_name = data.last_name;
+  if ('company_name' in data && data.company_name !== undefined)
+    updateData.company_name = data.company_name;
+  if ('address' in data && data.address !== undefined)
+    updateData.address = data.address;
+  if ('phone' in data && data.phone !== undefined)
+    updateData.phone = data.phone;
+  if ('voen' in data && data.voen !== undefined)
+    updateData.voen = data.voen;
+  if ('image_url' in data)
+    updateData.image_url = data.image_url ?? null;
+
+  await updateDoc(doc(db, 'supply_users', firebaseUid), updateData);
+
+  const updated = await getSupplyUser(firebaseUid);
+  if (!updated) throw new Error('Supply user not found after update');
+  return updated;
 }
 
 /**
  * Delete supply user profile
- * 
- * @param firebaseUid - Firebase UID
  */
 export async function deleteSupplyUser(firebaseUid: string): Promise<void> {
-  try {
-    // TODO: Implement Data Connect mutation
-    throw new Error('Not implemented');
-  } catch (error) {
-    console.error('Error deleting supply user:', error);
-    throw new Error(handleDataConnectError(error));
-  }
+  const { deleteDoc } = await import('firebase/firestore');
+  await deleteDoc(doc(db, 'supply_users', firebaseUid));
+  console.log('Supply Service: Supply user deleted from Firestore:', firebaseUid);
 }

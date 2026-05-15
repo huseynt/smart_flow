@@ -39,8 +39,8 @@ export function Sidebar() {
     roleMenuItems.push({ name: '📦 Təchizat', href: '/supply/dashboard' });
     roleMenuItems.push({ name: '📊 Sifarişlər', href: '/supply/orders' });
   } else if (role === UserRole.DISTRIBUTION) {
-    roleMenuItems.push({ name: '🚚 Paylamalar', href: '/distribution/dashboard' });
-    roleMenuItems.push({ name: '📦 İnventar', href: '/distribution/inventory' });
+    roleMenuItems.push({ name: '🚚 Təchizatçılar', href: '/distribution/dashboard' });
+    roleMenuItems.push({ name: '📦 Stok', href: '/distribution/stok' });
   }
 
   const settingsItems = [
