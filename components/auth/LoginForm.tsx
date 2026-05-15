@@ -14,7 +14,7 @@ import Image from "next/image";
 
 export function LoginForm() {
   const router = useRouter();
-  const { signIn } = useAuth();
+  const { login } = useAuth();
   const [generalError, setGeneralError] = useState<string | null>(null);
 
   const {
@@ -28,7 +28,7 @@ export function LoginForm() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       setGeneralError(null);
-      await signIn(data.email, data.password);
+      await login(data.email, data.password);
       router.push("/home");
     } catch (error) {
       const errorMessage =

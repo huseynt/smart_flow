@@ -1,0 +1,21 @@
+"""
+Create a new user in the User table after Firebase Auth signup
+"""
+mutation CreateUser($firebaseUid: String!, $email: String!, $role: String!) {
+  user_insert(data: {
+    firebaseUid: $firebaseUid
+    email: $email
+    role: $role
+    createdAt: now()
+    updatedAt: now()
+  }) {
+    key {
+      firebaseUid
+    }
+    firebaseUid
+    email
+    role
+    createdAt
+    updatedAt
+  }
+}

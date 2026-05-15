@@ -1,0 +1,48 @@
+"""
+Create a supply user profile after user registration
+"""
+mutation CreateSupplyUser(
+  $firebaseUid: String!
+  $firstName: String!
+  $lastName: String!
+  $companyName: String!
+  $address: String!
+  $phone: String!
+  $voen: String!
+  $imageUrl: String
+) {
+  supplyUser_insert(data: {
+    user: {
+      firebaseUid: $firebaseUid
+    }
+    firstName: $firstName
+    lastName: $lastName
+    companyName: $companyName
+    address: $address
+    phone: $phone
+    voen: $voen
+    imageUrl: $imageUrl
+    createdAt: now()
+    updatedAt: now()
+  }) {
+    key {
+      user {
+        firebaseUid
+      }
+    }
+    user {
+      firebaseUid
+      email
+      role
+    }
+    firstName
+    lastName
+    companyName
+    address
+    phone
+    voen
+    imageUrl
+    createdAt
+    updatedAt
+  }
+}

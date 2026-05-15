@@ -1,41 +1,80 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { ChevronDown, LogOut } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import { useRouter } from "next/navigation";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { Logo } from "./Logo";
-import Link from "next/link";
+import { useState } from 'react';
+import { ChevronDown, LogOut, Building2, Truck } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/useRole';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { UserRole } from '@/types';
+import { useRouter } from 'next/navigation';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { Logo } from './Logo';
+import Link from 'next/link';
 
 export function Header() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const { user, signOut } = useAuth();
+  const { firebaseUser, logout } = useAuth();
+  const role = useRole();
+  const { profile } = useCurrentUser();
   const router = useRouter();
 
   const handleLogout = async () => {
-    await signOut();
-    router.push("/login");
+    try {
+      await logout();
+      router.push('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
-  const userInitials = user?.displayName
-    ? user.displayName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-    : user?.email?.[0]?.toUpperCase() ?? "U";
+  // Get user display name
+  const displayName =
+    profile && 'first_name' in profile && 'last_name' in profile
+      ? `${profile.first_name} ${profile.last_name}`
+      : firebaseUser?.displayName ||
+        firebaseUser?.email?.split('@')[0] ||
+        'User';
+
+  const userInitials = displayName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  const roleLabel =
+    role === UserRole.SUPPLY
+      ? 'Təchizatçı'
+      : role === UserRole.DISTRIBUTION
+        ? 'Distribyutor'
+        : 'İstifadəçi';
+
+  const roleBgColor =
+    role === UserRole.SUPPLY
+      ? 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300'
+      : 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300';
 
   return (
     <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 shadow-sm">
-      {/* Left: Logo */}
-      {/* <div className="hidden md:block"> */}
-        {/* <Logo /> */}
-      {/* </div> */}
+      {/* Left: Empty for balance */}
+      <div></div>
 
-      {/* Right: Theme Toggle + User Menu */}
+      {/* Right: Theme Toggle + Role Badge + User Menu */}
       <div className="flex items-center gap-4 ml-auto">
-        {/* <ThemeToggle /> */}
+
+        {/* Role Badge */}
+        {role && (
+          <div
+            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${roleBgColor}`}
+          >
+            {role === UserRole.SUPPLY ? (
+              <Building2 className="h-3 w-3" />
+            ) : (
+              <Truck className="h-3 w-3" />
+            )}
+            {roleLabel}
+          </div>
+        )}
 
         {/* User Menu */}
         <div className="relative">
@@ -53,20 +92,25 @@ export function Header() {
             <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg z-50 border border-gray-200 dark:border-gray-700">
               <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                 <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {user?.displayName || "User"}
+                  {displayName}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {user?.email}
+                  {firebaseUser?.email}
                 </p>
+                {role && (
+                  <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1 font-semibold">
+                    {roleLabel}
+                  </p>
+                )}
               </div>
 
               <div className="p-2 space-y-1">
                 <Link
-                  href="/settings/account"
+                  href="/settings/profile"
                   onClick={() => setIsUserMenuOpen(false)}
                   className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                 >
-                  Hesab Parametrləri
+                  Profil Parametrləri
                 </Link>
                 <button
                   onClick={() => {

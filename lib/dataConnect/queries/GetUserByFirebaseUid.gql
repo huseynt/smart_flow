@@ -1,0 +1,30 @@
+"""
+Get user by Firebase UID with profile
+"""
+query GetUserByFirebaseUid($firebaseUid: String!) {
+  user(where: { firebaseUid: $firebaseUid }) {
+    firebaseUid
+    email
+    role
+    createdAt
+    updatedAt
+    supplyUser {
+      firstName
+      lastName
+      companyName
+      address
+      phone
+      voen
+      imageUrl
+      createdAt
+      updatedAt
+    }
+    distributionUser {
+      firstName
+      lastName
+      imageUrl
+      createdAt
+      updatedAt
+    }
+  }
+}

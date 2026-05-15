@@ -1,0 +1,17 @@
+"""
+Get distribution user profile by firebase UID
+"""
+query GetDistributionUser($firebaseUid: String!) {
+  distributionUser(where: { user: { firebaseUid: $firebaseUid } }) {
+    user {
+      firebaseUid
+      email
+      role
+    }
+    firstName
+    lastName
+    imageUrl
+    createdAt
+    updatedAt
+  }
+}

@@ -1,0 +1,28 @@
+"""
+Get all users by role
+"""
+query GetUsersByRole($role: String!, $limit: Int, $offset: Int) {
+  users(
+    where: { role: $role }
+    limit: $limit
+    offset: $offset
+    orderBy: [{ createdAt: Desc }]
+  ) {
+    firebaseUid
+    email
+    role
+    createdAt
+    updatedAt
+    supplyUser {
+      firstName
+      lastName
+      companyName
+      imageUrl
+    }
+    distributionUser {
+      firstName
+      lastName
+      imageUrl
+    }
+  }
+}

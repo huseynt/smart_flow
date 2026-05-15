@@ -1,0 +1,36 @@
+"""
+Create a distribution user profile after user registration
+"""
+mutation CreateDistributionUser(
+  $firebaseUid: String!
+  $firstName: String!
+  $lastName: String!
+  $imageUrl: String
+) {
+  distributionUser_insert(data: {
+    user: {
+      firebaseUid: $firebaseUid
+    }
+    firstName: $firstName
+    lastName: $lastName
+    imageUrl: $imageUrl
+    createdAt: now()
+    updatedAt: now()
+  }) {
+    key {
+      user {
+        firebaseUid
+      }
+    }
+    user {
+      firebaseUid
+      email
+      role
+    }
+    firstName
+    lastName
+    imageUrl
+    createdAt
+    updatedAt
+  }
+}

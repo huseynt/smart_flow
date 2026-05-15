@@ -1,0 +1,21 @@
+"""
+Get supply user profile by firebase UID
+"""
+query GetSupplyUser($firebaseUid: String!) {
+  supplyUser(where: { user: { firebaseUid: $firebaseUid } }) {
+    user {
+      firebaseUid
+      email
+      role
+    }
+    firstName
+    lastName
+    companyName
+    address
+    phone
+    voen
+    imageUrl
+    createdAt
+    updatedAt
+  }
+}

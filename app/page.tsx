@@ -6,17 +6,17 @@ import { useAuth } from "@/hooks/useAuth";
 
 export default function RootPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { firebaseUser, loading } = useAuth();
 
   useEffect(() => {
     if (!loading) {
-      if (user) {
+      if (firebaseUser) {
         router.push("/home");
       } else {
         router.push("/login");
       }
     }
-  }, [user, loading, router]);
+  }, [firebaseUser, loading, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -27,3 +27,4 @@ export default function RootPage() {
     </div>
   );
 }
+

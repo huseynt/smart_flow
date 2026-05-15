@@ -1,0 +1,44 @@
+"""
+Update supply user profile
+"""
+mutation UpdateSupplyUser(
+  $firebaseUid: String!
+  $firstName: String
+  $lastName: String
+  $companyName: String
+  $address: String
+  $phone: String
+  $voen: String
+  $imageUrl: String
+) {
+  supplyUser_update(
+    data: {
+      user: { firebaseUid: $firebaseUid }
+      firstName: $firstName
+      lastName: $lastName
+      companyName: $companyName
+      address: $address
+      phone: $phone
+      voen: $voen
+      imageUrl: $imageUrl
+      updatedAt: now()
+    }
+    where: {
+      user: { firebaseUid: $firebaseUid }
+    }
+  ) {
+    user {
+      firebaseUid
+      email
+      role
+    }
+    firstName
+    lastName
+    companyName
+    address
+    phone
+    voen
+    imageUrl
+    updatedAt
+  }
+}

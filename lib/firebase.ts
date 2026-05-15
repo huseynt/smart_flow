@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "firebase/app";
+import { initializeApp, getApps, FirebaseApp } from "firebase/app";
 import { getAuth as getFirebaseAuth, Auth } from "firebase/auth";
 
 const firebaseConfig = {
@@ -10,35 +10,36 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-let authInstance: Auth | null = null;
-
-function initFirebase() {
-  try {
-    const apps = getApps();
-    if (apps.length === 0) {
-      initializeApp(firebaseConfig);
-    }
-    return getFirebaseAuth();
-  } catch (error) {
-    console.error("Firebase initialization error:", error);
-    throw error;
-  }
+// Validate Firebase config
+if (!firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId) {
+  console.error('Firebase configuration is incomplete:', {
+    apiKey: !!firebaseConfig.apiKey,
+    authDomain: !!firebaseConfig.authDomain,
+    projectId: !!firebaseConfig.projectId,
+  });
 }
 
-export function getAuth(): Auth {
-  if (!authInstance) {
-    authInstance = initFirebase();
+export { firebaseConfig };
+
+// Initialize Firebase and get app instance
+let app: FirebaseApp;
+try {
+  const apps = getApps();
+  if (apps.length === 0) {
+    console.log('Initializing Firebase app');
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = apps[0];
   }
-  return authInstance;
+} catch (error) {
+  console.error("Firebase initialization error:", error);
+  throw error;
 }
 
-// Lazy auth object - only initializes when accessed
-export const auth = new Proxy({}, {
-  get: (_, prop) => {
-    const auth = getAuth();
-    return (auth as any)[prop];
-  },
-}) as unknown as Auth;
+export { app };
+
+// Get Auth instance
+export const auth: Auth = getFirebaseAuth(app);
 
 
 

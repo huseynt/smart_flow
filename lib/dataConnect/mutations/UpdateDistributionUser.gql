@@ -1,0 +1,32 @@
+"""
+Update distribution user profile
+"""
+mutation UpdateDistributionUser(
+  $firebaseUid: String!
+  $firstName: String
+  $lastName: String
+  $imageUrl: String
+) {
+  distributionUser_update(
+    data: {
+      user: { firebaseUid: $firebaseUid }
+      firstName: $firstName
+      lastName: $lastName
+      imageUrl: $imageUrl
+      updatedAt: now()
+    }
+    where: {
+      user: { firebaseUid: $firebaseUid }
+    }
+  ) {
+    user {
+      firebaseUid
+      email
+      role
+    }
+    firstName
+    lastName
+    imageUrl
+    updatedAt
+  }
+}
