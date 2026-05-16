@@ -6,10 +6,9 @@
  *
  * Axın (accepted statusunda):
  *   1. Fayl Firebase Storage-a yüklənir
- *   2. document_url + delivery_document_url → Python OCR service-ə göndərilir
- *   3. OCR nəticəsi → n8n /webhook/doc_checker → Hugging Face AI
- *   4. "OK"  → updateSupplierProductStock() çağrılır, stok yenilənir
- *   5. "SƏHV" → Modal açılır, uyğunsuzluqlar göstərilir, stok yenilənmir
+ *   2. document_url + delivery_document_url → n8n /webhook/doc_checker → Gemini AI (image render)
+ *   3. "OK"  → updateSupplierProductStock() çağrılır, stok yenilənir
+ *   4. "SƏHV" → Modal açılır, uyğunsuzluqlar göstərilir, manual qəbul seçimi təklif edilir
  */
 
 import { useEffect, useState, useRef } from 'react';
@@ -31,7 +30,6 @@ import {
 const storage = getStorage();
 
 const N8N_WEBHOOK = 'https://huseynpjt.app.n8n.cloud/webhook/doc_checker';
-const PYTHON_OCR_URL = process.env.NEXT_PUBLIC_PYTHON_OCR_URL ?? 'http://localhost:8000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -81,7 +79,6 @@ type SupplierSummary = {
   orders: SupplyChainOrder[];
 };
 
-// AI yoxlama nəticəsi
 type CheckResult =
   | { ok: true }
   | { ok: false; raw: string; supplier_name: string; product_name: string };
@@ -122,9 +119,11 @@ function calcHealth(current: number, reorder: number): {
 }
 
 // ─── Stock update ─────────────────────────────────────────────────────────────
+// DƏYIŞIKLIK 1: overrideQty parametri əlavə edildi (manual qəbul üçün)
 
-async function updateSupplierProductStock(order: SupplyChainOrder): Promise<void> {
+async function updateSupplierProductStock(order: SupplyChainOrder, overrideQty?: number): Promise<void> {
   const nowISO = new Date().toISOString();
+  const qty = overrideQty ?? order.ordered_quantity_piece;
   const suppliersRef = collection(db, 'suppliers');
   const supplierSnap = await getDocs(query(suppliersRef, where('supplier_id', '==', order.supplier_id)));
 
@@ -151,7 +150,7 @@ async function updateSupplierProductStock(order: SupplyChainOrder): Promise<void
 
   if (productSnap.empty) {
     const reorder  = order.stock_status.bravo_reorder_point_piece;
-    const newStock = order.ordered_quantity_piece;
+    const newStock = qty;
     const health   = calcHealth(newStock, reorder);
     await addDoc(productsRef, {
       barcode: order.barcode, product_id: order.product_id, product_name: order.product_name,
@@ -171,10 +170,10 @@ async function updateSupplierProductStock(order: SupplyChainOrder): Promise<void
     await Promise.all(productSnap.docs.map((productDoc) => {
       const data    = productDoc.data();
       const reorder = data.stock_status?.bravo_reorder_point_piece ?? 0;
-      const current = (data.stock_status?.bravo_current_stock_piece ?? 0) + order.ordered_quantity_piece;
+      const current = (data.stock_status?.bravo_current_stock_piece ?? 0) + qty;
       const health  = calcHealth(current, reorder);
       return updateDoc(productDoc.ref, {
-        'stock_status.bravo_current_stock_piece': increment(order.ordered_quantity_piece),
+        'stock_status.bravo_current_stock_piece': increment(qty),
         'stock_status.health_indicator':          health.health_indicator,
         'stock_status.health_order':              health.health_order,
         updated_at: nowISO,
@@ -184,36 +183,27 @@ async function updateSupplierProductStock(order: SupplyChainOrder): Promise<void
   }
 }
 
-// ─── OCR + AI check ───────────────────────────────────────────────────────────
+// ─── AI check (OCR-siz) ───────────────────────────────────────────────────────
+// DƏYIŞIKLIK 2: Python OCR tamamilə silindi.
+// sender_url + receiver_url birbaşa n8n-ə göndərilir, Gemini orada image render edir.
 
 async function runDocumentCheck(
   senderUrl: string,
   receiverUrl: string,
   order: SupplyChainOrder,
 ): Promise<CheckResult> {
-  // 1. Python OCR service
-  const ocrRes = await fetch(`${PYTHON_OCR_URL}/extract-by-url`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ sender_url: senderUrl, receiver_url: receiverUrl }),
-  });
-  if (!ocrRes.ok) throw new Error(`OCR xətası: ${ocrRes.status}`);
-  const ocrData = await ocrRes.json();
-
-  // 2. n8n → Hugging Face AI
   const n8nRes = await fetch(N8N_WEBHOOK, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       body: {
-        sender:   ocrData.sender,
-        receiver: ocrData.receiver,
+        sender_url:   senderUrl,
+        receiver_url: receiverUrl,
       },
     }),
   });
   if (!n8nRes.ok) throw new Error(`n8n xətası: ${n8nRes.status}`);
 
-  // n8n cavabı: { output: "OK" } və ya { output: "SƏHV:\n- ..." }
   const n8nData = await n8nRes.json();
   const raw: string = (n8nData?.output ?? n8nData?.result ?? JSON.stringify(n8nData)).trim();
 
@@ -229,16 +219,28 @@ async function runDocumentCheck(
 }
 
 // ─── Uyğunsuzluq Modal ────────────────────────────────────────────────────────
+// DƏYIŞIKLIK 3: order + onForceAccept prop-ları əlavə edildi.
+// Modal altında manual qəbul bölməsi: say dəyişdirmə + "Yenə Qəbul Et" düyməsi.
 
-function MismatchModal({ result, onClose }: {
+function MismatchModal({ result, order, onClose, onForceAccept }: {
   result: Extract<CheckResult, { ok: false }>;
+  order: SupplyChainOrder;
   onClose: () => void;
+  onForceAccept: (qty: number) => Promise<void>;
 }) {
-  // "SƏHV:\n- X: ...\n- Y: ..." → sətirləri ayır
+  const [manualQty, setManualQty] = useState(order.ordered_quantity_piece);
+  const [accepting, setAccepting] = useState(false);
+
   const lines = result.raw
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.startsWith('-'));
+
+  const handleForceAccept = async () => {
+    setAccepting(true);
+    await onForceAccept(manualQty);
+    setAccepting(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -271,37 +273,77 @@ function MismatchModal({ result, onClose }: {
         </div>
 
         {/* Uyğunsuzluqlar */}
-        <div className="px-6 py-4 space-y-2 max-h-72 overflow-y-auto">
+        <div className="px-6 py-4 space-y-2 max-h-52 overflow-y-auto">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Aşkar edilən fərqlər</p>
           {lines.length > 0 ? lines.map((line, i) => {
-            // "- Molped 120: göndərildi 120, qəbul edildi 108, fərq -12"
             const body = line.replace(/^-\s*/, '');
             const colonIdx = body.indexOf(':');
             const productPart = colonIdx !== -1 ? body.slice(0, colonIdx).trim() : body;
             const detailPart  = colonIdx !== -1 ? body.slice(colonIdx + 1).trim() : '';
-
             return (
               <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900">
                 <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-red-700 dark:text-red-300 leading-tight">{productPart}</p>
-                  {detailPart && (
-                    <p className="text-xs text-red-600/80 dark:text-red-400/80 mt-1">{detailPart}</p>
-                  )}
+                  {detailPart && <p className="text-xs text-red-600/80 dark:text-red-400/80 mt-1">{detailPart}</p>}
                 </div>
               </div>
             );
           }) : (
-            // Sətir formatı fərqlidirsə raw mətni göstər
             <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900">
               <pre className="text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap font-mono">{result.raw}</pre>
             </div>
           )}
         </div>
 
+        {/* Manual qəbul bölməsi */}
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-amber-50/60 dark:bg-amber-950/10 space-y-3">
+          <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />Manual qəbul
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Problemi qismən qəbul etmək istəyirsinizsə, faktiki qəbul edilən miqdarı daxil edin.
+          </p>
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+                Qəbul edilən miqdar (ədəd)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={order.ordered_quantity_piece}
+                value={manualQty}
+                onChange={(e) =>
+                  setManualQty(Math.max(1, Math.min(order.ordered_quantity_piece, Number(e.target.value))))
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">
+                Sifariş: {order.ordered_quantity_piece} ədəd
+                {manualQty !== order.ordered_quantity_piece && (
+                  <span className="text-amber-600 dark:text-amber-400 ml-2">
+                    · Fərq: {order.ordered_quantity_piece - manualQty} ədəd
+                  </span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={handleForceAccept}
+              disabled={accepting || manualQty <= 0}
+              className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-medium transition shadow-sm"
+            >
+              {accepting
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <CheckCircle className="h-4 w-4" />}
+              {accepting ? 'Saxlanır...' : 'Yenə Qəbul Et'}
+            </button>
+          </div>
+        </div>
+
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
-          <p className="text-xs text-gray-400">Stok yenilənmədi. Sənədləri yenidən yükləyin.</p>
+        <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-400">Sənədləri yenidən yükləmək üçün bağlayın.</p>
           <button onClick={onClose}
             className="px-4 py-2 rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-medium hover:opacity-90 transition">
             Bağla
@@ -489,30 +531,29 @@ function OrderDetail({ order, onBack, onUpdated }: {
 
     setUploadingDelivery(true);
     try {
-      // ── 1. Qəbul sənədini Firebase-ə yüklə ──────────────────────────────
+      // 1. Qəbul sənədini Firebase-ə yüklə
       setCheckStep('Sənəd yüklənir...');
       const storageRef = ref(storage, `supply_chain/${order.id}/delivery_${file.name}`);
       await uploadBytes(storageRef, file);
       const deliveryURL = await getDownloadURL(storageRef);
 
-      // ── 2. Firestore-a delivery_document_url yaz (hələ accepted deyil) ──
+      // 2. Firestore-a delivery_document_url yaz
       await updateDoc(doc(db, 'supply_chain', order.id), {
         delivery_document_url: deliveryURL,
         updated_at: nowISO(),
       });
 
-      // ── 3. OCR → AI yoxlama ──────────────────────────────────────────────
-      setCheckStep('Sənədlər OCR ilə oxunur...');
+      // 3. n8n → Gemini AI yoxlama (OCR-siz, birbaşa URL)
+      setCheckStep('Sənədlər AI ilə yoxlanılır...');
       let checkResult: CheckResult;
       try {
         checkResult = await runDocumentCheck(order.document_url, deliveryURL, order);
       } catch (err) {
         console.error('Document check xətası:', err);
-        // OCR/AI xətası olsa istifadəçiyə xəbər ver amma stoku yenilə
         checkResult = { ok: true };
       }
 
-      // ── 4a. OK → status accepted et, stoku yenilə ───────────────────────
+      // 4a. OK → status accepted, stoku yenilə
       if (checkResult.ok) {
         setCheckStep('Stok yenilənir...');
         await updateDoc(doc(db, 'supply_chain', order.id), {
@@ -525,7 +566,7 @@ function OrderDetail({ order, onBack, onUpdated }: {
         await updateSupplierProductStock(order);
         onUpdated('✓ Sənədlər uyğundur — sifariş tamamlandı, stok yeniləndi');
       } else {
-        // ── 4b. SƏHV → status accepted et amma stok yenilənmir ────────────
+        // 4b. SƏHV → status accepted, stok yenilənmir, modal açılır
         await updateDoc(doc(db, 'supply_chain', order.id), {
           status: 'accepted', updated_at: nowISO(),
           tracking_events: arrayUnion({
@@ -543,10 +584,31 @@ function OrderDetail({ order, onBack, onUpdated }: {
     }
   };
 
+  // Manual qəbul: modal-dan gələn qty ilə stoku yenilə
+  const handleForceAccept = async (qty: number) => {
+    await updateDoc(doc(db, 'supply_chain', order.id), {
+      tracking_events: arrayUnion({
+        status:    'accepted',
+        timestamp: nowISO(),
+        note:      `Manual qəbul: ${qty} ədəd (sifariş: ${order.ordered_quantity_piece} ədəd)`,
+      }),
+      updated_at: nowISO(),
+    });
+    await updateSupplierProductStock(order, qty);
+    setMismatch(null);
+    onUpdated(`✓ Manual qəbul: ${qty} ədəd stoka əlavə edildi`);
+  };
+
   return (
     <>
-      {/* Uyğunsuzluq modal */}
-      {mismatch && <MismatchModal result={mismatch} onClose={() => setMismatch(null)} />}
+      {mismatch && (
+        <MismatchModal
+          result={mismatch}
+          order={order}
+          onClose={() => setMismatch(null)}
+          onForceAccept={handleForceAccept}
+        />
+      )}
 
       <div className="space-y-6">
         {/* Header */}
@@ -615,7 +677,6 @@ function OrderDetail({ order, onBack, onUpdated }: {
               <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Qəbul sənədini yüklə</span>
             </div>
             <div className="p-5">
-              {/* OCR/AI progress göstəricisi */}
               {checkStep && (
                 <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-sm mb-4">
                   <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
@@ -655,15 +716,21 @@ function OrderDetail({ order, onBack, onUpdated }: {
                 <div className="p-5"><DocDisplay url={order.delivery_document_url} label="Qəbul sənədi" /></div>
               </div>
             )}
-            {/* Yoxlama nəticəsi — tracking_events-dən oxu */}
             {(() => {
               const lastEvent = [...order.tracking_events].reverse().find((e) => e.status === 'accepted');
-              const isOk = lastEvent?.note?.includes('AI yoxlama: OK');
+              const isOk      = lastEvent?.note?.includes('AI yoxlama: OK');
               const isMismatch = lastEvent?.note?.includes('UYĞUNSUZLUQ');
+              const isManual  = lastEvent?.note?.includes('Manual qəbul');
               if (isOk) return (
                 <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-400">
                   <ShieldCheck className="h-4 w-4 flex-shrink-0" />
                   Sənədlər uyğundur — sifariş tamamlandı, stok yeniləndi
+                </div>
+              );
+              if (isManual) return (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  {lastEvent?.note}
                 </div>
               );
               if (isMismatch) return (
@@ -748,8 +815,7 @@ function OrderDetail({ order, onBack, onUpdated }: {
   );
 }
 
-// ─── SupplierProducts, SuppliersTable, Main Page ──────────────────────────────
-// (Bu hissələr dəyişməyib — orijinal koddan kopyala)
+// ─── SupplierProducts ─────────────────────────────────────────────────────────
 
 function SupplierProducts({ supplier, onBack, onUpdated }: {
   supplier: SupplierSummary; onBack: () => void; onUpdated: (msg: string) => void;
@@ -883,6 +949,8 @@ function SupplierProducts({ supplier, onBack, onUpdated }: {
     </div>
   );
 }
+
+// ─── SuppliersTable ───────────────────────────────────────────────────────────
 
 function SuppliersTable({ suppliers, onSelect }: { suppliers: SupplierSummary[]; onSelect: (s: SupplierSummary) => void }) {
   return (

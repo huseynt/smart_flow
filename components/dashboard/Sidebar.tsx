@@ -47,7 +47,7 @@ export function Sidebar() {
 
   const settingsItems = [
     { name: 'Profil', href: '/settings/profile' },
-    { name: 'Dil', href: '/settings/language' },
+    // { name: 'Dil', href: '/settings/language' },
   ];
 
   // Get user display name
