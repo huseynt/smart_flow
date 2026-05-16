@@ -37,9 +37,11 @@ export function Sidebar() {
   const roleMenuItems = [];
   if (role === UserRole.SUPPLY) {
     roleMenuItems.push({ name: '📦 Təchizat', href: '/supply/dashboard' });
+    roleMenuItems.push({ name: '📦 Məhsullar', href: '/supply/products' });
     roleMenuItems.push({ name: '📊 Sifarişlər', href: '/supply/orders' });
   } else if (role === UserRole.DISTRIBUTION) {
     roleMenuItems.push({ name: '🚚 Təchizatçılar', href: '/distribution/dashboard' });
+    roleMenuItems.push({ name: '🛍️ Yeni məhsullar', href: '/distribution/newproducts' });
     roleMenuItems.push({ name: '📦 Stok', href: '/distribution/stok' });
   }
 
