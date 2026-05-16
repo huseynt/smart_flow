@@ -5,6 +5,7 @@
 
 'use client';
 
+import { SeedFirestore } from '@/components/dev/SeedFirestore';
 import { useDistributionProfile } from '@/hooks/useDistributionProfile';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useRole } from '@/hooks/useRole';
@@ -41,6 +42,8 @@ export default function DistributionDashboardPage() {
           Paylamaları idarə edin
         </p>
       </div>
+
+      <SeedFirestore />
 
       {/* Placeholder Content */}
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-8 border border-gray-200 dark:border-gray-800 text-center">
