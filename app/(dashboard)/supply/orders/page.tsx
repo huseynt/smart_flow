@@ -5,7 +5,9 @@
 'use client';
 
 import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { useSupplyProfile } from '@/hooks/useSupplyProfile';
 import { UserRole } from '@/types';
+import { useEffect } from 'react';
 
 export default function SupplyOrdersPage() {
   useRequireAuth({ requiredRole: UserRole.SUPPLY });

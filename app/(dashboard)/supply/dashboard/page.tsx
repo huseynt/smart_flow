@@ -8,10 +8,10 @@
  *  ready            → [Supplier: sənəd yükləyir]     → shipped  (+tracking_number, +document_url)
  *  shipped          → [Distributor: "Çatdı ✓" düyməsi] → delivered
  *  delivered        → [Distributor: sənəd yükləyir]  → accepted (+delivery_document_url)
+ *  accepted         → suppliers/{supplier_id}/products stoku avtomatik yenilənir
  *
  * Supplier:    app/(dashboard)/supply/chain/page.tsx
  * Distributor: app/(dashboard)/distribution/supply/product/tracking/page.tsx
- *              → import { DistributionTrackingPage } from buradan istifadə et
  */
 
 import { useEffect, useState, useRef } from 'react';
@@ -25,8 +25,11 @@ import {
   doc,
   updateDoc,
   arrayUnion,
+  getDocs,
+  increment,
 } from 'firebase/firestore';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { useSupplyProfile } from '@/hooks/useSupplyProfile';
 import { UserRole } from '@/types';
 import {
   Truck,
@@ -92,8 +95,8 @@ type SupplyChainOrder = {
   status: ShipmentStatus;
   tracking_number: string | null;
   tracking_events: TrackingEvent[];
-  document_url: string | null;           // Supplier yükləyir
-  delivery_document_url: string | null;  // Distributor yükləyir
+  document_url: string | null;
+  delivery_document_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -104,6 +107,48 @@ function generateTrackingNumber(): string {
   const mid = Math.random().toString(36).toUpperCase().slice(2, 8);
   const suffix = Math.floor(Math.random() * 90 + 10);
   return `AZ-${mid}-${suffix}`;
+}
+
+/**
+ * Qəbul edilmiş sifarişin miqdarını supplier-in products sub-kolleksiyasında
+ * müvafiq məhsulun stock_status.bravo_current_stock_piece sahəsinə əlavə edir.
+ *
+ * Firestore yolu: suppliers/{supplierId}/products (barcode üzrə query)
+ */
+async function updateSupplierProductStock(order: SupplyChainOrder): Promise<void> {
+  try {
+    const productsRef = collection(db, 'suppliers', order.supplier_id, 'products');
+    const q = query(productsRef, where('barcode', '==', order.barcode));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      console.warn(
+        `updateSupplierProductStock: barcode "${order.barcode}" üçün məhsul tapılmadı` +
+        ` (supplier: ${order.supplier_id})`
+      );
+      return;
+    }
+
+    const nowISO = new Date().toISOString();
+
+    // Eyni barcode-a malik birdən çox sənəd olsa hamısını yeniləyirik (normalda 1 olur)
+    await Promise.all(
+      snap.docs.map((productDoc) =>
+        updateDoc(productDoc.ref, {
+          'stock_status.bravo_current_stock_piece': increment(order.ordered_quantity_piece),
+          updated_at: nowISO,
+        })
+      )
+    );
+
+    console.log(
+      `updateSupplierProductStock: "${order.product_name}" — ` +
+      `+${order.ordered_quantity_piece} ədəd əlavə edildi`
+    );
+  } catch (err) {
+    // Stok yenilənməsindəki xəta sifariş axınını bloklamasın; yalnız log olunur
+    console.error('updateSupplierProductStock xətası:', err);
+  }
 }
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -325,7 +370,6 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
 
   const nowISO = () => new Date().toISOString();
 
-  // Supplier: pending_shipment → ready
   const handleMarkReady = async () => {
     setMarkingReady(true);
     try {
@@ -339,7 +383,6 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
     finally { setMarkingReady(false); }
   };
 
-  // Supplier: ready → shipped (sənəd yükləyir)
   const handleShipDocument = async (file: File) => {
     setUploadingShip(true);
     try {
@@ -362,7 +405,6 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
     finally { setUploadingShip(false); }
   };
 
-  // Distributor: shipped → delivered
   const handleMarkDelivered = async () => {
     setMarkingDelivered(true);
     try {
@@ -376,13 +418,16 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
     finally { setMarkingDelivered(false); }
   };
 
-  // Distributor: delivered → accepted (sənəd yükləyir)
+  // ─── YENİ: Qəbul sənədi + stok yeniləməsi ────────────────────────────────
   const handleDeliveryDocument = async (file: File) => {
     setUploadingDelivery(true);
     try {
+      // 1) Sənədi Firebase Storage-a yüklə
       const storageRef = ref(storage, `supply_chain/${order.id}/delivery_${file.name}`);
       await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(storageRef);
+
+      // 2) supply_chain sənədini "accepted" statusuna gətir
       await updateDoc(doc(db, 'supply_chain', order.id), {
         status: 'accepted',
         delivery_document_url: downloadURL,
@@ -392,17 +437,21 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
           note: `Qəbul sənədi: ${file.name}`,
         }),
       });
-      onUpdated('Qəbul sənədi yükləndi — sifariş tamamlandı');
+
+      // 3) Supplier-in products sub-kolleksiyasında stoku artır
+      //    suppliers/{supplier_id}/products — barcode üzrə tapılır
+      await updateSupplierProductStock(order);
+
+      onUpdated('Qəbul sənədi yükləndi — sifariş tamamlandı, stok yeniləndi');
     } catch (err) { console.error('deliveryDocument:', err); }
     finally { setUploadingDelivery(false); }
   };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const s = order.status;
 
   return (
     <div className="space-y-6">
-
-      {/* Header */}
       <div className="flex items-center gap-3">
         <button
           onClick={onBack}
@@ -418,7 +467,6 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
         <StatusBadge status={s} />
       </div>
 
-      {/* Tracking stepper */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
         <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-6">
           İzləmə vəziyyəti
@@ -434,10 +482,8 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
         )}
       </div>
 
-      {/* ── SUPPLIER action panel ────────────────────────────────────────────── */}
       {role === 'supplier' && (
         <>
-          {/* Step 1: Hazırla düyməsi */}
           {s === 'pending_shipment' && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-amber-200 dark:border-amber-800 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-amber-100 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30">
@@ -455,16 +501,13 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
                   disabled={markingReady}
                   className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium transition shadow-sm"
                 >
-                  {markingReady
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <PackageCheck className="h-4 w-4" />}
+                  {markingReady ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
                   {markingReady ? 'Saxlanır...' : 'Hazır'}
                 </button>
               </div>
             </div>
           )}
 
-          {/* Step 2: Sənəd yüklə → shipped */}
           {s === 'ready' && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-indigo-200 dark:border-indigo-800 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-indigo-100 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/30">
@@ -478,49 +521,35 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
                   <strong className="text-indigo-600 dark:text-indigo-400">Göndərildi</strong>-yə keçəcək
                   və tracking nömrəsi yaranacaq.
                 </p>
-                <UploadZone
-                  onFile={handleShipDocument}
-                  uploading={uploadingShip}
-                  hint="Sənəd yüklənəndə avtomatik tracking nömrəsi yaranır"
-                />
+                <UploadZone onFile={handleShipDocument} uploading={uploadingShip} hint="Sənəd yüklənəndə avtomatik tracking nömrəsi yaranır" />
               </div>
             </div>
           )}
 
-          {/* shipped / delivered / accepted → supplier izləyir */}
           {(s === 'shipped' || s === 'delivered' || s === 'accepted') && (
             <div className="space-y-4">
               {order.document_url && (
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
-                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-                      Göndərilmə sənədi
-                    </span>
+                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Göndərilmə sənədi</span>
                   </div>
-                  <div className="p-5">
-                    <DocDisplay url={order.document_url} label="Göndərilmə sənədi yüklənib" />
-                  </div>
+                  <div className="p-5"><DocDisplay url={order.document_url} label="Göndərilmə sənədi yüklənib" /></div>
                 </div>
               )}
               {order.delivery_document_url && (
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
-                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-                      Qəbul sənədi (Distributor)
-                    </span>
+                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Qəbul sənədi (Distributor)</span>
                   </div>
-                  <div className="p-5">
-                    <DocDisplay url={order.delivery_document_url} label="Qəbul sənədi yüklənib" />
-                  </div>
+                  <div className="p-5"><DocDisplay url={order.delivery_document_url} label="Qəbul sənədi yüklənib" /></div>
                 </div>
               )}
-              {s !== 'accepted' && (
+              {s !== 'accepted' ? (
                 <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
                   <Clock className="h-4 w-4 flex-shrink-0" />
                   Növbəti addım distributor tərəfindən həyata keçiriləcək
                 </div>
-              )}
-              {s === 'accepted' && (
+              ) : (
                 <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-400">
                   <CheckCircle className="h-4 w-4 flex-shrink-0" />
                   Sifariş uğurla tamamlandı
@@ -531,104 +560,69 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
         </>
       )}
 
-      {/* ── DISTRIBUTOR action panel ─────────────────────────────────────────── */}
       {role === 'distributor' && (
         <>
-          {/* pending / ready: gözləyir */}
           {(s === 'pending_shipment' || s === 'ready') && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-700 dark:text-amber-400">
               <Clock className="h-4 w-4 flex-shrink-0" />
               Təchizatçı sifarişi hazırlayır...
             </div>
           )}
-
-          {/* shipped: "Çatdı ✓" düyməsi + göndərilmə sənədi linki */}
           {s === 'shipped' && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-200 dark:border-blue-800 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30">
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
-                  Çatdırılmanı təsdiqlə
-                </span>
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Çatdırılmanı təsdiqlə</span>
               </div>
               <div className="p-5 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Məhsul anbarınıza çatdıqda aşağıdakı düyməyə basın.
-                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Məhsul anbarınıza çatdıqda aşağıdakı düyməyə basın.</p>
                   {order.document_url && (
-                    <a
-                      href={order.document_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 mt-2 text-xs text-indigo-500 hover:text-indigo-600 transition"
-                    >
+                    <a href={order.document_url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 mt-2 text-xs text-indigo-500 hover:text-indigo-600 transition">
                       <FileText className="h-3.5 w-3.5" />
                       Göndərilmə sənədinə bax
                     </a>
                   )}
                 </div>
-                <button
-                  onClick={handleMarkDelivered}
-                  disabled={markingDelivered}
-                  className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium transition shadow-sm"
-                >
-                  {markingDelivered
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <Check className="h-4 w-4" />}
+                <button onClick={handleMarkDelivered} disabled={markingDelivered}
+                  className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium transition shadow-sm">
+                  {markingDelivered ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   {markingDelivered ? 'Saxlanır...' : 'Çatdı ✓'}
                 </button>
               </div>
             </div>
           )}
-
-          {/* delivered: qəbul sənədi yüklə */}
           {s === 'delivered' && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-indigo-200 dark:border-indigo-800 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-indigo-100 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/30">
-                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
-                  Qəbul sənədini yüklə
-                </span>
+                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Qəbul sənədini yüklə</span>
               </div>
               <div className="p-5">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   Qəbul aktını yükləyin. Sənəd yüklənən kimi sifariş{' '}
-                  <strong className="text-green-600 dark:text-green-400">Qəbul edildi</strong>{' '}
-                  statusuna keçəcək.
+                  <strong className="text-green-600 dark:text-green-400">Qəbul edildi</strong> statusuna keçəcək
+                  və supplier stoku avtomatik yenilənəcək.
                 </p>
-                <UploadZone
-                  onFile={handleDeliveryDocument}
-                  uploading={uploadingDelivery}
-                  hint="Sənəd yüklənəndə sifariş tamamlanmış sayılır"
-                />
+                <UploadZone onFile={handleDeliveryDocument} uploading={uploadingDelivery} hint="Sənəd yüklənəndə stok avtomatik yenilənir" />
               </div>
             </div>
           )}
-
-          {/* accepted: hər iki sənədi göstər */}
           {s === 'accepted' && (
             <div className="space-y-4">
               {order.document_url && (
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
-                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-                      Göndərilmə sənədi
-                    </span>
+                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Göndərilmə sənədi</span>
                   </div>
-                  <div className="p-5">
-                    <DocDisplay url={order.document_url} label="Göndərilmə sənədi" />
-                  </div>
+                  <div className="p-5"><DocDisplay url={order.document_url} label="Göndərilmə sənədi" /></div>
                 </div>
               )}
               {order.delivery_document_url && (
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
-                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-                      Qəbul sənədi
-                    </span>
+                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Qəbul sənədi</span>
                   </div>
-                  <div className="p-5">
-                    <DocDisplay url={order.delivery_document_url} label="Qəbul sənədi" />
-                  </div>
+                  <div className="p-5"><DocDisplay url={order.delivery_document_url} label="Qəbul sənədi" /></div>
                 </div>
               )}
               <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-400">
@@ -640,7 +634,6 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
         </>
       )}
 
-      {/* Məhsul / Sifariş məlumatları */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
@@ -648,45 +641,30 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
           </div>
           <div className="px-5">
             <InfoRow icon={<Hash className="h-4 w-4" />} label="SKU / Barkod"
-              value={<span>{order.product_id}<span className="text-gray-400 mx-1">·</span><span className="font-mono text-xs text-gray-500">{order.barcode}</span></span>}
-            />
+              value={<span>{order.product_id}<span className="text-gray-400 mx-1">·</span><span className="font-mono text-xs text-gray-500">{order.barcode}</span></span>} />
             <InfoRow icon={<Tag className="h-4 w-4" />} label="Kateqoriya"
-              value={<span className="px-2 py-0.5 rounded-full text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">{order.product_category}</span>}
-            />
-            <InfoRow icon={<Box className="h-4 w-4" />} label="Qablaşdırma"
-              value={`${order.uom_conversion.units_per_case} ədəd / ${order.uom_conversion.order_uom}`}
-            />
-            <InfoRow icon={<Truck className="h-4 w-4" />} label="Çatdırılma müddəti"
-              value={`${order.logistics.lead_time_days} iş günü`}
-            />
-            <InfoRow icon={<BarChart3 className="h-4 w-4" />} label="Sifariş nöqtəsi"
-              value={`${order.stock_status.bravo_reorder_point_piece.toLocaleString('az-AZ')} ədəd`}
-            />
+              value={<span className="px-2 py-0.5 rounded-full text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">{order.product_category}</span>} />
+            <InfoRow icon={<Box className="h-4 w-4" />} label="Qablaşdırma" value={`${order.uom_conversion.units_per_case} ədəd / ${order.uom_conversion.order_uom}`} />
+            <InfoRow icon={<Truck className="h-4 w-4" />} label="Çatdırılma müddəti" value={`${order.logistics.lead_time_days} iş günü`} />
+            <InfoRow icon={<BarChart3 className="h-4 w-4" />} label="Sifariş nöqtəsi" value={`${order.stock_status.bravo_reorder_point_piece.toLocaleString('az-AZ')} ədəd`} />
           </div>
         </div>
-
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
             <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Sifariş məlumatları</span>
           </div>
           <div className="px-5">
             <InfoRow icon={<ShoppingCart className="h-4 w-4" />} label="Sifariş (koli)"
-              value={<span className="text-indigo-600 dark:text-indigo-400 font-bold">{order.ordered_quantity_case.toLocaleString('az-AZ')} koli</span>}
-            />
-            <InfoRow icon={<Package className="h-4 w-4" />} label="Sifariş (ədəd)"
-              value={`${order.ordered_quantity_piece.toLocaleString('az-AZ')} ədəd`}
-            />
+              value={<span className="text-indigo-600 dark:text-indigo-400 font-bold">{order.ordered_quantity_case.toLocaleString('az-AZ')} koli</span>} />
+            <InfoRow icon={<Package className="h-4 w-4" />} label="Sifariş (ədəd)" value={`${order.ordered_quantity_piece.toLocaleString('az-AZ')} ədəd`} />
             <InfoRow icon={<Sparkles className="h-4 w-4" />} label="Distributor qeydi"
-              value={order.distributor_note ?? <span className="text-gray-400 text-xs italic">Qeyd yoxdur</span>}
-            />
+              value={order.distributor_note ?? <span className="text-gray-400 text-xs italic">Qeyd yoxdur</span>} />
             <InfoRow icon={<Clock className="h-4 w-4" />} label="Sifariş tarixi"
-              value={new Date(order.created_at).toLocaleDateString('az-AZ', { day: '2-digit', month: 'long', year: 'numeric' })}
-            />
+              value={new Date(order.created_at).toLocaleDateString('az-AZ', { day: '2-digit', month: 'long', year: 'numeric' })} />
           </div>
         </div>
       </div>
 
-      {/* Hadisə jurnalı */}
       {order.tracking_events.length > 0 && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
@@ -697,17 +675,13 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
               const step = STATUS_STEPS.find((st) => st.key === ev.status);
               return (
                 <div key={i} className="flex items-start gap-3 px-5 py-3.5">
-                  <span className={`mt-0.5 flex-shrink-0 p-1.5 rounded-full ${STATUS_BADGE[ev.status]}`}>
-                    {step?.icon}
-                  </span>
+                  <span className={`mt-0.5 flex-shrink-0 p-1.5 rounded-full ${STATUS_BADGE[ev.status]}`}>{step?.icon}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white">{step?.label}</p>
                     {ev.note && <p className="text-xs text-gray-400 mt-0.5">{ev.note}</p>}
                   </div>
                   <span className="text-xs text-gray-400 flex-shrink-0">
-                    {new Date(ev.timestamp).toLocaleDateString('az-AZ', {
-                      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-                    })}
+                    {new Date(ev.timestamp).toLocaleDateString('az-AZ', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               );
@@ -724,24 +698,18 @@ function OrderDetail({ order, role, onBack, onUpdated }: {
 function OrderCard({ order, onClick }: { order: SupplyChainOrder; onClick: () => void }) {
   const needsAction = order.status === 'pending_shipment' || order.status === 'ready';
   return (
-    <div
-      onClick={onClick}
+    <div onClick={onClick}
       className={`group bg-white dark:bg-gray-900 rounded-xl border cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5
-        ${needsAction
-          ? 'border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600'
-          : 'border-gray-200 dark:border-gray-700'}`}
+        ${needsAction ? 'border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600' : 'border-gray-200 dark:border-gray-700'}`}
     >
       <div className="p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight truncate">
-              {order.product_name}
-            </p>
+            <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight truncate">{order.product_name}</p>
             <p className="text-xs text-gray-400 mt-0.5 truncate">{order.supplier_name}</p>
           </div>
           <StatusBadge status={order.status} />
         </div>
-
         <div className="space-y-1.5 mb-4">
           <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-full">
             {order.product_category?.split(' / ')[1] ?? order.product_category}
@@ -752,19 +720,13 @@ function OrderCard({ order, onClick }: { order: SupplyChainOrder; onClick: () =>
             <span>{order.logistics.lead_time_days} gün</span>
           </div>
         </div>
-
-        {/* Mini progress */}
         <div className="flex gap-1 mb-3">
           {STATUS_STEPS.map((step, idx) => (
-            <div
-              key={step.key}
-              className={`h-1.5 flex-1 rounded-full transition-all ${
-                idx <= STATUS_ORDER[order.status] ? 'bg-indigo-500' : 'bg-gray-200 dark:bg-gray-700'
-              }`}
+            <div key={step.key}
+              className={`h-1.5 flex-1 rounded-full transition-all ${idx <= STATUS_ORDER[order.status] ? 'bg-indigo-500' : 'bg-gray-200 dark:bg-gray-700'}`}
             />
           ))}
         </div>
-
         <div className="flex items-center justify-between">
           {order.tracking_number
             ? <span className="text-xs font-mono text-indigo-500 dark:text-indigo-400">{order.tracking_number}</span>
@@ -778,7 +740,7 @@ function OrderCard({ order, onClick }: { order: SupplyChainOrder; onClick: () =>
 
 // ─── Page Shell ───────────────────────────────────────────────────────────────
 
-function SupplyChainPageShell({ role }: { role: PageRole }) {
+function SupplyChainPageShell({ role, supplierId }: { role: PageRole; supplierId?: string }) {
   const [orders, setOrders]             = useState<SupplyChainOrder[]>([]);
   const [loading, setLoading]           = useState(true);
   const [selected, setSelected]         = useState<SupplyChainOrder | null>(null);
@@ -786,8 +748,8 @@ function SupplyChainPageShell({ role }: { role: PageRole }) {
   const [successMsg, setSuccessMsg]     = useState('');
 
   useEffect(() => {
-    // TODO: real auth user-dan supplierId götür
-    const supplierId = 'demo-supplier';
+    if (role === 'supplier' && !supplierId) return;
+
     const q = role === 'supplier'
       ? query(collection(db, 'supply_chain'), where('supplier_id', '==', supplierId))
       : query(collection(db, 'supply_chain'));
@@ -804,7 +766,7 @@ function SupplyChainPageShell({ role }: { role: PageRole }) {
     }, (err) => { console.error('supply_chain listener:', err); setLoading(false); });
 
     return () => unsub();
-  }, [role]);
+  }, [role, supplierId]);
 
   useEffect(() => {
     if (!selected) return;
@@ -815,7 +777,7 @@ function SupplyChainPageShell({ role }: { role: PageRole }) {
   const filtered = filterStatus === 'ALL' ? orders : orders.filter((o) => o.status === filterStatus);
 
   const counts = {
-    ALL: orders.length,
+    ALL:              orders.length,
     pending_shipment: orders.filter((o) => o.status === 'pending_shipment').length,
     ready:            orders.filter((o) => o.status === 'ready').length,
     shipped:          orders.filter((o) => o.status === 'shipped').length,
@@ -845,9 +807,7 @@ function SupplyChainPageShell({ role }: { role: PageRole }) {
     return (
       <div className="max-w-4xl mx-auto">
         <nav className="flex items-center gap-2 text-xs text-gray-400 mb-5">
-          <button onClick={() => setSelected(null)} className="hover:text-indigo-500 transition-colors">
-            Təchizat
-          </button>
+          <button onClick={() => setSelected(null)} className="hover:text-indigo-500 transition-colors">Təchizat</button>
           <ChevronRight className="h-3 w-3" />
           <span className="text-gray-700 dark:text-gray-200 font-medium truncate">{selected.product_name}</span>
         </nav>
@@ -869,9 +829,7 @@ function SupplyChainPageShell({ role }: { role: PageRole }) {
           Təchizat
         </h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          {role === 'supplier'
-            ? 'Qəbul edilmiş sifarişlər və göndərilmə vəziyyəti'
-            : 'Gözlənilən çatdırılmalar və qəbul vəziyyəti'}
+          {role === 'supplier' ? 'Qəbul edilmiş sifarişlər və göndərilmə vəziyyəti' : 'Gözlənilən çatdırılmalar və qəbul vəziyyəti'}
         </p>
       </div>
 
@@ -895,9 +853,7 @@ function SupplyChainPageShell({ role }: { role: PageRole }) {
           {FILTER_TABS.map(({ key, label }) => {
             const active = filterStatus === key;
             return (
-              <button
-                key={key}
-                onClick={() => setFilterStatus(key)}
+              <button key={key} onClick={() => setFilterStatus(key)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all ${
                   active
                     ? 'border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 font-medium ring-2 ring-indigo-200 dark:ring-indigo-800'
@@ -944,13 +900,13 @@ function SupplyChainPageShell({ role }: { role: PageRole }) {
 /** Supplier: app/(dashboard)/supply/chain/page.tsx */
 export default function SupplyChainPage() {
   useRequireAuth({ requiredRole: UserRole.SUPPLY });
-  return <SupplyChainPageShell role="supplier" />;
+  const supplyProfile = useSupplyProfile();
+  const supplierId = (supplyProfile as any)?.user_id as string | undefined;
+  return <SupplyChainPageShell role="supplier" supplierId={supplierId} />;
 }
 
 /**
  * Distributor: app/(dashboard)/distribution/supply/product/tracking/page.tsx
- *
- * Həmin faylda sadəcə bu qədər yaz:
  *
  *   'use client';
  *   export { DistributionTrackingPage as default } from '@/app/(dashboard)/supply/chain/page';

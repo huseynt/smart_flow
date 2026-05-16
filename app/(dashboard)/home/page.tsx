@@ -7,6 +7,7 @@ import { useDistributionProfile } from '@/hooks/useDistributionProfile';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { UserRole } from '@/types';
 import { Building2, Truck, TrendingUp, Package } from 'lucide-react';
+import { useEffect } from 'react';
 
 export default function HomePage() {
   // Protect the page
