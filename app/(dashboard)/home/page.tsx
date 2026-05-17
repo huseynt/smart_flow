@@ -6,14 +6,112 @@ import { useSupplyProfile } from '@/hooks/useSupplyProfile';
 import { useDistributionProfile } from '@/hooks/useDistributionProfile';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { UserRole } from '@/types';
-import { Building2, Truck, TrendingUp, Package } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { getSuppliers, getProductsFirstPage, Product } from '@/services/stock.service';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+
+import {
+  Activity,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Building2,
+  Package,
+  ShieldAlert,
+  Star,
+  Truck,
+  Warehouse,
+} from 'lucide-react';
+
+import { motion } from 'framer-motion';
+
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  PolarAngleAxis,
+  PolarGrid,
+  Radar,
+  RadarChart,
+  RadialBar,
+  RadialBarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+
+const orderData = [
+  { day: 'Mon', orders: 120, inventory: 95 },
+  { day: 'Tue', orders: 190, inventory: 90 },
+  { day: 'Wed', orders: 260, inventory: 84 },
+  { day: 'Thu', orders: 300, inventory: 79 },
+  { day: 'Fri', orders: 420, inventory: 72 },
+  { day: 'Sat', orders: 520, inventory: 64 },
+];
+
+const donutData = [
+  { name: 'Fresh', value: 480 },
+  { name: 'Frozen', value: 220 },
+  { name: 'Beverages', value: 310 },
+  { name: 'Snacks', value: 190 },
+];
+
+const supplierRadar = [
+  { subject: 'Speed', A: 90 },
+  { subject: 'Accuracy', A: 82 },
+  { subject: 'Stock', A: 88 },
+  { subject: 'Returns', A: 70 },
+  { subject: 'Support', A: 94 },
+];
+
+const radialData = [
+  {
+    name: 'Inventory',
+    value: 78,
+    fill: '#22c55e',
+  },
+];
+
+const stats = [
+  {
+    title: 'Kritik Məhsullar',
+    value: '14',
+    change: '-8%',
+    positive: false,
+    icon: ShieldAlert,
+  },
+  {
+    title: 'Stok Faizi',
+    value: '97%',
+    change: '+4%',
+    positive: true,
+    icon: Warehouse,
+  },
+  {
+    title: 'Aktiv Çatdırılmalar',
+    value: '42',
+    change: '+12%',
+    positive: true,
+    icon: Truck,
+  },
+  {
+    title: 'Sifariş Dəqiqliyi',
+    value: '99.2%',
+    change: '+1.2%',
+    positive: true,
+    icon: Activity,
+  },
+];
+
+const mapPoints = [
+  { city: 'Gəncə', top: '22%', left: '18%' },
+  { city: 'Şəki', top: '16%', left: '28%' },
+  { city: 'Lənkəran', top: '72%', left: '62%' },
+  { city: 'Bakı', top: '44%', left: '74%' },
+];
 
 export default function HomePage() {
-  // Protect the page
   useRequireAuth();
 
   const { loading, firebaseUser } = useAuth();
@@ -21,7 +119,6 @@ export default function HomePage() {
   const supplyProfile = useSupplyProfile();
   const distributionProfile = useDistributionProfile();
 
-  // Get user display name
   const displayName =
     supplyProfile && 'first_name' in supplyProfile && 'last_name' in supplyProfile
       ? `${supplyProfile.first_name} ${supplyProfile.last_name}`
@@ -31,348 +128,461 @@ export default function HomePage() {
           firebaseUser?.email?.split('@')[0] ||
           'İstifadəçi';
 
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [sampleProducts, setSampleProducts] = useState<Product[] | null>(null);
-  const [metricsLoading, setMetricsLoading] = useState(false);
-  const [orders, setOrders] = useState<any[]>([]);
-  // derived analytics
-  const criticalCount = (sampleProducts || []).filter(p => {
-    const h = p.stock_status?.health_indicator || 'HEALTHY';
-    return h === 'OUT_OF_STOCK' || h === 'CRITICAL_LOW';
-  }).length;
-  const healthyCount = (sampleProducts || []).filter(p => (p.stock_status?.health_indicator || '') === 'HEALTHY' || (p.stock_status?.health_indicator || '') === 'OVERSTOCK').length;
-  const totalCount = (sampleProducts || []).length || 0;
-  const inStockPercent = totalCount === 0 ? 0 : Math.round((healthyCount / totalCount) * 100);
-  const avgLeadTime = Math.round(((sampleProducts || []).reduce((a,b) => a + (b.logistics?.lead_time_days || 0), 0) / (totalCount || 1)) * 10) / 10;
-  // orders-derived metrics
-  const totalOrders = orders.length;
-  const acceptedOrders = orders.filter(o => o.status === 'accepted').length;
-  const activeShipments = orders.filter(o => o.status !== 'accepted').length;
-  const activityRatio = totalOrders === 0 ? 0 : Math.round((acceptedOrders / totalOrders) * 100);
-
-  useEffect(() => {
-    // Load some Firestore-backed dashboard data (suppliers + small product sample)
-    let mounted = true;
-    async function load() {
-      try {
-        setMetricsLoading(true);
-        const s = await getSuppliers();
-        if (!mounted) return;
-        setSuppliers(s || []);
-
-        // If there is at least one supplier, load its first product page as a sample
-        if (s && s.length > 0) {
-          try {
-            const p = await getProductsFirstPage(s[0].id);
-            if (!mounted) return;
-            setSampleProducts(p.products ?? []);
-          } catch (e) {
-            // ignore product load failures — dashboard remains usable
-            setSampleProducts([]);
-          }
-        }
-      } finally {
-        if (mounted) setMetricsLoading(false);
-      }
-    }
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // subscribe to supply_chain orders for dashboard metrics
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'supply_chain'), (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    }, (err) => console.error('supply_chain snapshot error', err));
-    return () => unsub();
-  }, []);
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Yüklənir...</p>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="h-14 w-14 animate-spin rounded-full border-b-2 border-cyan-400" />
       </div>
     );
   }
 
   return (
-    <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Smart Dashboard</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Xoş gəldiniz, {displayName} — təchizat və paylama proseslərinin ağıllı təhlili.</p>
-      </div>
+    <div className="min-h-screen bg-white p-4 text-slate-900 md:p-8">
+      <div className="mx-auto max-w-7xl">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"
+        >
+          <div>
+            <p className="mb-2 text-cyan-400">Bravo Smart Flow</p>
+            <h1 className="text-4xl font-black tracking-tight">
+              Ağıllı Logistika Paneli
+            </h1>
+            <p className="mt-2 text-slate-500">
+              Xoş gəlmisən, {displayName} — real-time retail və təchizat analitikası.
+            </p>
+          </div>
 
-      {/* SUPPLY DASHBOARD */}
-      {role === UserRole.SUPPLY && supplyProfile && (
-        <>
-          {/* Company Info Card */}
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800 mb-6">
-            <div className="flex items-start justify-between">
+          <div className="rounded-3xl border border-slate-200/80 bg-white/80 px-5 py-4 backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              {role === UserRole.SUPPLY ? (
+                <Building2 className="text-orange-400" />
+              ) : (
+                <Truck className="text-emerald-400" />
+              )}
+
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-orange-600" />
-                  {supplyProfile.company_name}
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  VOEN: {supplyProfile.voen}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {supplyProfile.address}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  📞 {supplyProfile.phone}
-                </p>
-              </div>
-              <div className="px-3 py-1 bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 rounded-full text-xs font-semibold">
-                Təchizatçı
+                <p className="text-sm text-slate-500">Hazırkı Rol</p>
+                <h3 className="font-semibold">
+                  {role === UserRole.SUPPLY ? 'Təchizatçı Paneli' : 'Distribusiya Paneli'}
+                </h3>
               </div>
             </div>
           </div>
-        </>
-      )}
+        </motion.div>
 
-      {/* DISTRIBUTION DASHBOARD */}
-      {role === UserRole.DISTRIBUTION && distributionProfile && (
-        <>
-          {/* User Info Card */}
-          {/* <div className="bg-green-50 dark:bg-green-900/10 rounded-lg shadow-sm p-6 border-l-4 border-green-500 border-gray-200 dark:border-gray-800 mb-6 mt-6">
-            <div className="flex items-start justify-between">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          {stats.map((item, index) => (
+            <motion.div
+              key={item.title}
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.08 }}
+              className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 backdrop-blur-xl"
+            >
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">{item.title}</p>
+                  <h2 className="mt-2 text-3xl font-black">{item.value}</h2>
+                </div>
+
+                <div className="rounded-2xl bg-slate-100 p-3">
+                  <item.icon className="h-6 w-6 text-cyan-400" />
+                </div>
+              </div>
+
+              <div className="mb-4 h-16">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={orderData}>
+                    <Area
+                      type="monotone"
+                      dataKey="orders"
+                      stroke="#22d3ee"
+                      fillOpacity={1}
+                      fill="url(#spark)"
+                    />
+                    <defs>
+                      <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div
+                className={`flex items-center gap-2 text-sm ${
+                  item.positive ? 'text-emerald-400' : 'text-red-400'
+                }`}
+              >
+                {item.positive ? (
+                  <ArrowUpRight className="h-4 w-4" />
+                ) : (
+                  <ArrowDownRight className="h-4 w-4" />
+                )}
+                {item.change} bu həftə
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-3">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl xl:col-span-2"
+          >
+            <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Truck className="h-5 w-5 text-green-600" />
-                  {distributionProfile.first_name} {distributionProfile.last_name}
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {firebaseUser?.email}
+                <h2 className="text-xl font-bold">Sifariş Trend Analitikası</h2>
+                <p className="text-sm text-slate-500">
+                  Canlı sifariş artımı və stok vəziyyəti
                 </p>
               </div>
-              <div className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-xs font-semibold">
-                Distribyutor
-              </div>
-            </div>
-          </div> */}
 
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    Aktiv Paylamalar
-                  </p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                      {activeShipments}
-                    </p>
-                </div>
-                <Truck className="h-8 w-8 text-green-600 opacity-50" />
+              <div className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300">
+                +28% Artım
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    Inventar
-                  </p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                      {suppliers.reduce((a, b) => a + (b.total_active_skus || 0), 0)}
-                    </p>
-                </div>
-                <Package className="h-8 w-8 text-blue-600 opacity-50" />
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={orderData}>
+                  <defs>
+                    <linearGradient id="ordersGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.7} />
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+
+                  <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
+                  <XAxis dataKey="day" stroke="#64748b" />
+                  <YAxis stroke="#64748b" />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '16px',
+                    }}
+                  />
+
+                  <Area
+                    type="monotone"
+                    dataKey="orders"
+                    stroke="#22d3ee"
+                    strokeWidth={3}
+                    fill="url(#ordersGradient)"
+                  />
+
+                  <Area
+                    type="monotone"
+                    dataKey="inventory"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    fillOpacity={0}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl"
+          >
+            <div className="mb-5">
+              <h2 className="text-xl font-bold">İnventar Paylanması</h2>
+              <p className="text-sm text-slate-500">Anbar kateqoriya göstəriciləri</p>
+            </div>
+
+            <div className="relative mx-auto h-[260px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={donutData}
+                    innerRadius={70}
+                    outerRadius={100}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {donutData.map((_, index) => (
+                      <Cell
+                        key={index}
+                        fill={['#06b6d4', '#22c55e', '#f59e0b', '#8b5cf6'][index]}
+                      />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <h2 className="text-4xl font-black">1.2K</h2>
+                <p className="text-sm text-slate-500">Ümumi Məhsul</p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-3">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl lg:col-span-2"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold">Canlı Logistika Xəritəsi</h2>
+                <p className="text-sm text-slate-500">
+                  Tədarükçülərdən Bravo mərkəzinə aktiv çatdırılmalar
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-full bg-cyan-500/10 px-3 py-1 text-xs text-cyan-300">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
+                Canlı İzləmə
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    Fəaliyyət Nisbəti
-                  </p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                      {activityRatio}%
-                    </p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-green-600 opacity-50" />
+            <div className="relative h-[350px] overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-white to-slate-100">
+              <div className="absolute inset-0 opacity-20">
+                <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.18)_1px,transparent_1px)] bg-[length:24px_24px]" />
               </div>
-            </div>
-          </div>
-        </>
-      )}
 
-      {/* Top KPIs (shared for both roles) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-800">
-          <p className="text-xs text-gray-500">Critical SKUs</p>
-          <p className="text-2xl font-semibold mt-2">{metricsLoading ? '—' : criticalCount}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-800">
-          <p className="text-xs text-gray-500">In-stock %</p>
-          <p className="text-2xl font-semibold mt-2">{metricsLoading ? '—' : `${inStockPercent}%`}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-800">
-          <p className="text-xs text-gray-500">Avg Lead Time (days)</p>
-          <p className="text-2xl font-semibold mt-2">{metricsLoading ? '—' : avgLeadTime}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-800">
-          <p className="text-xs text-gray-500">Ümumi Inventar SKUs</p>
-          <p className="text-2xl font-semibold mt-2">{metricsLoading ? '—' : suppliers.reduce((a, b) => a + (b.total_active_skus || 0), 0)}</p>
-        </div>
-      </div>
-
-      {/* Main grid: charts, lists, alerts — 2-column on desktop */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column (wide) */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Orders Trend (sparkline) */}
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Sifariş Trendi (Son 30 gün)</h3>
-            <div className="mt-4">
-              <svg className="w-full h-24" viewBox="0 0 300 60" preserveAspectRatio="none">
-                <polyline fill="none" stroke="#4f46e5" strokeWidth="3" points="0,45 30,42 60,30 90,25 120,20 150,22 180,18 210,15 240,12 270,10 300,8" />
-              </svg>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">Hacimli sifarişlərin trendini göstərir — məlumat Firestore-dan yüklənə bilər.</p>
-          </div>
-
-            {/* Analytics row: Enlarged Pie chart + Legend */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {/* Pie chart (inventory by health) - enlarged */}
-              <div className="md:col-span-1 bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800 flex items-center">
-                <div className="flex-1 flex items-center gap-6">
-                  <svg viewBox="0 0 64 64" className="w-40 h-40">
-                    {
-                      (() => {
-                        const counts: Record<string, number> = { OUT_OF_STOCK: 0, CRITICAL_LOW: 0, LOW: 0, HEALTHY: 0, OVERSTOCK: 0 };
-                        (sampleProducts || []).forEach((p) => {
-                          const h = p.stock_status?.health_indicator || 'HEALTHY';
-                          counts[h] = (counts[h] || 0) + 1;
-                        });
-                        const total = Object.values(counts).reduce((a,b) => a + b, 0) || 1;
-                        const colors: Record<string,string> = { OUT_OF_STOCK: '#dc2626', CRITICAL_LOW: '#f97316', LOW: '#f59e0b', HEALTHY: '#10b981', OVERSTOCK: '#6366f1' };
-                        let start = 0;
-                        const paths: any[] = [];
-                        Object.entries(counts).forEach(([k,v]) => {
-                          const portion = v / total;
-                          if (portion <= 0) return;
-                          const end = start + portion;
-                          const large = end - start > 0.5 ? 1 : 0;
-                          const sx = 32 + 32 * Math.cos(2 * Math.PI * start);
-                          const sy = 32 + 32 * Math.sin(2 * Math.PI * start);
-                          const ex = 32 + 32 * Math.cos(2 * Math.PI * end);
-                          const ey = 32 + 32 * Math.sin(2 * Math.PI * end);
-                          const d = `M32 32 L ${sx} ${sy} A 32 32 0 ${large} 1 ${ex} ${ey} Z`;
-                          paths.push(<path key={k} d={d} fill={colors[k] || '#9CA3AF'} />);
-                          start = end;
-                        });
-                        return paths;
-                      })()
-                    }
-                  </svg>
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Inventar Paylanması</h4>
-                    <div className="mt-3 text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                      <div>Stok bitib: {(sampleProducts || []).filter(p => (p.stock_status?.health_indicator || '') === 'OUT_OF_STOCK').length}</div>
-                      <div>Kritik səviyyə: {(sampleProducts || []).filter(p => (p.stock_status?.health_indicator || '') === 'CRITICAL_LOW').length}</div>
-                      <div>Aşağı: {(sampleProducts || []).filter(p => (p.stock_status?.health_indicator || '') === 'LOW').length}</div>
-                      <div>Sağlam: {(sampleProducts || []).filter(p => (p.stock_status?.health_indicator || '') === 'HEALTHY').length}</div>
-                      <div>Artıq stok: {(sampleProducts || []).filter(p => (p.stock_status?.health_indicator || '') === 'OVERSTOCK').length}</div>
-                    </div>
+              {mapPoints.map((point, index) => (
+                <div
+                  key={index}
+                  className="absolute"
+                  style={{ top: point.top, left: point.left }}
+                >
+                  <div className="relative flex flex-col items-center">
+                    <div className="h-4 w-4 animate-ping rounded-full bg-cyan-400 absolute" />
+                    <div className="relative z-10 h-4 w-4 rounded-full bg-cyan-300 border-2 border-white" />
+                    <span className="mt-3 text-xs text-slate-900">{point.city}</span>
                   </div>
                 </div>
+              ))}
+
+              <svg className="absolute inset-0 h-full w-full">
+                <line
+                  x1="18%"
+                  y1="22%"
+                  x2="74%"
+                  y2="44%"
+                  stroke="#22d3ee"
+                  strokeWidth="2"
+                  strokeDasharray="6 6"
+                />
+                <line
+                  x1="28%"
+                  y1="16%"
+                  x2="74%"
+                  y2="44%"
+                  stroke="#22c55e"
+                  strokeWidth="2"
+                  strokeDasharray="6 6"
+                />
+                <line
+                  x1="62%"
+                  y1="72%"
+                  x2="74%"
+                  y2="44%"
+                  stroke="#f59e0b"
+                  strokeWidth="2"
+                  strokeDasharray="6 6"
+                />
+              </svg>
+            </div>
+          </motion.div>
+
+          <div className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">İnventar Sağlamlığı</h2>
+                  <p className="text-sm text-slate-500">Anbar stabilliyi</p>
+                </div>
+
+                <Package className="text-cyan-400" />
               </div>
 
-              {/* Legend / analytics summary */}
-              <div className="md:col-span-1 bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Analitika Xülasəsi</h4>
-                <div className="mt-4 space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                  <div className="flex items-center justify-between"><span>Ümumi SKUs</span><span>{totalCount}</span></div>
-                  <div className="flex items-center justify-between"><span>Critical SKUs</span><span>{criticalCount}</span></div>
-                  <div className="flex items-center justify-between"><span>In-stock %</span><span>{inStockPercent}%</span></div>
-                  <div className="flex items-center justify-between"><span>Avg Lead Time</span><span>{avgLeadTime} gün</span></div>
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadialBarChart
+                    innerRadius="70%"
+                    outerRadius="100%"
+                    data={radialData}
+                    startAngle={180}
+                    endAngle={0}
+                  >
+                    <RadialBar background dataKey="value" cornerRadius={12} />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="-mt-24 text-center">
+                <h2 className="text-5xl font-black">78%</h2>
+                <p className="text-slate-500">Optimal Stok</p>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="rounded-3xl border border-red-500/20 bg-red-500/10 p-6 backdrop-blur-xl"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="animate-pulse text-red-400" />
+                  <div>
+                    <h2 className="font-bold">Kritik Xəbərdarlıqlar</h2>
+                    <p className="text-sm text-red-200/70">
+                      Təcili əməliyyat riskləri
+                    </p>
+                  </div>
+                </div>
+
+                <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-300">
+                  3 Aktiv
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-white/5 bg-slate-100/80 p-3">
+                  <p className="font-medium">Milk SKU #204</p>
+                  <p className="text-sm text-slate-500">
+                    Stok səviyyəsi limitdən aşağıdır
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/5 bg-slate-100/80 p-3">
+                  <p className="font-medium">Gecikmiş Çatdırılma</p>
+                  <p className="text-sm text-slate-500">
+                    Net-Tech MMC 2 saat gecikib
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold">Ən Yaxşı Təchizatçı</h2>
+                <p className="text-sm text-slate-500">
+                  Performans və etibarlılıq göstəriciləri
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1 text-amber-400">
+                <Star className="h-4 w-4 fill-amber-400" />
+                <Star className="h-4 w-4 fill-amber-400" />
+                <Star className="h-4 w-4 fill-amber-400" />
+                <Star className="h-4 w-4 fill-amber-400" />
+                <Star className="h-4 w-4 fill-amber-400" />
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-2xl bg-slate-100/80 p-4">
+              <h3 className="text-lg font-bold">Net-Tech MMC</h3>
+              <p className="text-sm text-slate-500">
+                Son çatdırılma uğur faizi: 98.7%
+              </p>
+            </div>
+
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart outerRadius={90} data={supplierRadar}>
+                  <PolarGrid stroke="#cbd5e1" />
+                  <PolarAngleAxis dataKey="subject" stroke="#cbd5e1" />
+                  <Radar
+                    dataKey="A"
+                    stroke="#22d3ee"
+                    fill="#06b6d4"
+                    fillOpacity={0.5}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+            className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-cyan-500/20 to-emerald-500/10 p-6 backdrop-blur-xl"
+          >
+            <div className="mb-6">
+              <h2 className="text-2xl font-black">
+                AI Proqnoz və Data Storytelling
+              </h2>
+
+              <p className="mt-2 text-slate-600">
+                Demand is increasing rapidly in Bakı region. Current trend suggests
+                inventory pressure within the next 48 hours.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-100/80 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm text-slate-500">
+                    Tələb Proqnoz Dəqiqliyi
+                  </span>
+
+                  <span className="font-bold text-emerald-400">94%</span>
+                </div>
+
+                <div className="h-2 rounded-full bg-slate-100">
+                  <div className="h-2 w-[94%] rounded-full bg-emerald-400" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-100/80 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm text-slate-500">
+                    Təchizatçı Effektivliyi
+                  </span>
+
+                  <span className="font-bold text-cyan-400">88%</span>
+                </div>
+
+                <div className="h-2 rounded-full bg-slate-100">
+                  <div className="h-2 w-[88%] rounded-full bg-cyan-400" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-100/80 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm text-slate-500">
+                    Marşrut Optimizasiyası
+                  </span>
+
+                  <span className="font-bold text-amber-400">76%</span>
+                </div>
+
+                <div className="h-2 rounded-full bg-slate-100">
+                  <div className="h-2 w-[76%] rounded-full bg-amber-400" />
                 </div>
               </div>
             </div>
-
-          {/* Recent Shipments table */}
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Son Çatdırılmalar</h3>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-500">
-                    <th className="pb-2">ID</th>
-                    <th className="pb-2">Status</th>
-                    <th className="pb-2">Təchizatçı</th>
-                    <th className="pb-2">Tarix</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {metricsLoading && (
-                    <tr><td colSpan={4} className="py-4 text-center text-gray-500">Yüklənir...</td></tr>
-                  )}
-                  {!metricsLoading && (!sampleProducts || sampleProducts.length === 0) && (
-                    <tr><td colSpan={4} className="py-4 text-center text-gray-500">Çatdırılma məlumatı tapılmadı</td></tr>
-                  )}
-                  {!metricsLoading && sampleProducts && sampleProducts.slice(0,5).map((p) => (
-                    <tr key={p.id} className="border-t border-gray-100 dark:border-gray-800">
-                      <td className="py-2">{p.product_id || p.id}</td>
-                      <td className="py-2">{p.stock_status.health_indicator}</td>
-                      <td className="py-2">{p.supplier_id}</td>
-                      <td className="py-2">{p.updated_at?.slice(0,10) ?? ''}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Right column (widgets) */}
-        <div className="space-y-6">
-          {/* Inventory Health */}
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-800">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Inventar Sağlamlığı</h4>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
-                <div className="h-2 bg-green-500" style={{ width: `${Math.min(100, (sampleProducts?.length ?? 0) * 5)}%` }} />
-              </div>
-              <div className="text-xs text-gray-500">{sampleProducts ? `${sampleProducts.length} SKUs` : '—'}</div>
-            </div>
-          </div>
-
-          {/* Top Suppliers */}
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-800">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Top Təchizatçılar</h4>
-            <ul className="mt-3 space-y-2 text-sm text-gray-600 dark:text-gray-400">
-              {metricsLoading && <li>Yüklənir...</li>}
-              {!metricsLoading && suppliers.length === 0 && <li>Məlumat yoxdur</li>}
-              {!metricsLoading && suppliers.slice(0,5).map((s) => (
-                <li key={s.id} className="flex items-center justify-between">
-                  <span>{s.supplier_name}</span>
-                  <span className="text-xs text-gray-500">{s.total_active_skus ?? 0} SKUs</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Alerts */}
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-800">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Xəbərdarlıqlar</h4>
-            <ul className="mt-3 text-sm text-gray-600 dark:text-gray-400 space-y-2">
-              <li className="text-red-600">• 3 məhsul üçün stok kritik səviyyədə</li>
-              <li className="text-yellow-600">• 5 sifariş gecikmiş</li>
-              <li className="text-green-600">• Bütün sistemlər normal işləyir</li>
-            </ul>
-          </div>
+          </motion.div>
         </div>
       </div>
-
     </div>
   );
 }
