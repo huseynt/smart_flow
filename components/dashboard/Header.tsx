@@ -62,6 +62,8 @@ export function Header() {
       {/* Right: Theme Toggle + Role Badge + User Menu */}
       <div className="flex items-center gap-4 ml-auto">
 
+        <ThemeToggle />
+
         {/* Role Badge */}
         {role && (
           <div

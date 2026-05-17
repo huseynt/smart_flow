@@ -130,14 +130,14 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
+      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-slate-950">
         <div className="h-14 w-14 animate-spin rounded-full border-b-2 border-cyan-400" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white p-4 text-slate-900 md:p-8">
+    <div className="min-h-screen bg-slate-50 p-4 text-slate-900 transition-colors duration-300 dark:bg-slate-900 rounded-2xl dark:text-slate-50 md:p-8">
       <div className="mx-auto max-w-7xl">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -145,26 +145,26 @@ export default function HomePage() {
           className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"
         >
           <div>
-            <p className="mb-2 text-cyan-400">Bravo Smart Flow</p>
-            <h1 className="text-4xl font-black tracking-tight">
+            <p className="mb-2 text-cyan-500 dark:text-cyan-400 font-medium">Bravo Smart Flow</p>
+            <h1 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">
               Ağıllı Logistika Paneli
             </h1>
-            <p className="mt-2 text-slate-500">
-              Xoş gəlmisən, {displayName} — real-time retail və təchizat analitikası.
+            <p className="mt-2 text-slate-500 dark:text-slate-400">
+              Xoş gəlmisən, <span className="font-semibold text-slate-800 dark:text-slate-200">{displayName}</span> — real-time retail və təchizat analitikası.
             </p>
           </div>
 
-          <div className="rounded-3xl border border-slate-200/80 bg-white/80 px-5 py-4 backdrop-blur-xl">
+          <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4 backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-900/50">
             <div className="flex items-center gap-3">
               {role === UserRole.SUPPLY ? (
-                <Building2 className="text-orange-400" />
+                <Building2 className="text-orange-500 dark:text-orange-400" />
               ) : (
-                <Truck className="text-emerald-400" />
+                <Truck className="text-emerald-500 dark:text-emerald-400" />
               )}
 
               <div>
-                <p className="text-sm text-slate-500">Hazırkı Rol</p>
-                <h3 className="font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Hazırkı Rol</p>
+                <h3 className="font-semibold text-slate-800 dark:text-slate-200">
                   {role === UserRole.SUPPLY ? 'Təchizatçı Paneli' : 'Distribusiya Paneli'}
                 </h3>
               </div>
@@ -179,16 +179,16 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 25 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.08 }}
-              className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 backdrop-blur-xl"
+              className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-800/80 dark:bg-slate-900/50"
             >
               <div className="mb-5 flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-500">{item.title}</p>
-                  <h2 className="mt-2 text-3xl font-black">{item.value}</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{item.title}</p>
+                  <h2 className="mt-2 text-3xl font-black text-slate-900 dark:text-white">{item.value}</h2>
                 </div>
 
-                <div className="rounded-2xl bg-slate-100 p-3">
-                  <item.icon className="h-6 w-6 text-cyan-400" />
+                <div className="rounded-2xl bg-slate-100 p-3 dark:bg-slate-800">
+                  <item.icon className="h-6 w-6 text-cyan-500 dark:text-cyan-400" />
                 </div>
               </div>
 
@@ -198,13 +198,13 @@ export default function HomePage() {
                     <Area
                       type="monotone"
                       dataKey="orders"
-                      stroke="#22d3ee"
+                      stroke="#06b6d4"
                       fillOpacity={1}
                       fill="url(#spark)"
                     />
                     <defs>
                       <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8} />
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
                         <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
                       </linearGradient>
                     </defs>
@@ -213,8 +213,8 @@ export default function HomePage() {
               </div>
 
               <div
-                className={`flex items-center gap-2 text-sm ${
-                  item.positive ? 'text-emerald-400' : 'text-red-400'
+                className={`flex items-center gap-2 text-sm font-medium ${
+                  item.positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                 }`}
               >
                 {item.positive ? (
@@ -232,17 +232,17 @@ export default function HomePage() {
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl xl:col-span-2"
+            className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900/50 xl:col-span-2"
           >
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold">Sifariş Trend Analitikası</h2>
-                <p className="text-sm text-slate-500">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Sifariş Trend Analitikası</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Canlı sifariş artımı və stok vəziyyəti
                 </p>
               </div>
 
-              <div className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300">
+              <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
                 +28% Artım
               </div>
             </div>
@@ -252,19 +252,20 @@ export default function HomePage() {
                 <AreaChart data={orderData}>
                   <defs>
                     <linearGradient id="ordersGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.7} />
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.5} />
                       <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
                     </linearGradient>
                   </defs>
 
-                  <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
-                  <XAxis dataKey="day" stroke="#64748b" />
-                  <YAxis stroke="#64748b" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-800" />
+                  <XAxis dataKey="day" stroke="currentColor" className="text-slate-400 dark:text-slate-500" dy={10} />
+                  <YAxis stroke="currentColor" className="text-slate-400 dark:text-slate-500" dx={-10} />
                   <Tooltip
                     contentStyle={{
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
+                      background: 'var(--tooltip-bg, #ffffff)',
+                      border: '1px solid var(--tooltip-border, #e2e8f0)',
                       borderRadius: '16px',
+                      color: '#0f172a',
                     }}
                   />
 
@@ -292,11 +293,11 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl"
+            className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900/50"
           >
             <div className="mb-5">
-              <h2 className="text-xl font-bold">İnventar Paylanması</h2>
-              <p className="text-sm text-slate-500">Anbar kateqoriya göstəriciləri</p>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">İnventar Paylanması</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Anbar kateqoriya göstəriciləri</p>
             </div>
 
             <div className="relative mx-auto h-[260px] w-full">
@@ -320,8 +321,8 @@ export default function HomePage() {
               </ResponsiveContainer>
 
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <h2 className="text-4xl font-black">1.2K</h2>
-                <p className="text-sm text-slate-500">Ümumi Məhsul</p>
+                <h2 className="text-4xl font-black text-slate-900 dark:text-white">1.2K</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Ümumi Məhsul</p>
               </div>
             </div>
           </motion.div>
@@ -331,25 +332,25 @@ export default function HomePage() {
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl lg:col-span-2"
+            className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900/50 lg:col-span-2"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold">Canlı Logistika Xəritəsi</h2>
-                <p className="text-sm text-slate-500">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Canlı Logistika Xəritəsi</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Tədarükçülərdən Bravo mərkəzinə aktiv çatdırılmalar
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 rounded-full bg-cyan-500/10 px-3 py-1 text-xs text-cyan-300">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
+              <div className="flex items-center gap-2 rounded-full bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-500 dark:bg-cyan-400" />
                 Canlı İzləmə
               </div>
             </div>
 
-            <div className="relative h-[350px] overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-white to-slate-100">
-              <div className="absolute inset-0 opacity-20">
-                <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.18)_1px,transparent_1px)] bg-[length:24px_24px]" />
+            <div className="relative h-[350px] overflow-hidden rounded-3xl border border-slate-100 bg-gradient-to-br from-slate-50 to-slate-100 dark:border-slate-800/50 dark:from-slate-900/20 dark:to-slate-900/60">
+              <div className="absolute inset-0 opacity-40 dark:opacity-10">
+                <div className="h-full w-full bg-[radial-gradient(circle_at_center,#64748b_1px,transparent_1px)] bg-[length:24px_24px]" />
               </div>
 
               {mapPoints.map((point, index) => (
@@ -360,40 +361,16 @@ export default function HomePage() {
                 >
                   <div className="relative flex flex-col items-center">
                     <div className="h-4 w-4 animate-ping rounded-full bg-cyan-400 absolute" />
-                    <div className="relative z-10 h-4 w-4 rounded-full bg-cyan-300 border-2 border-white" />
-                    <span className="mt-3 text-xs text-slate-900">{point.city}</span>
+                    <div className="relative z-10 h-4 w-4 rounded-full bg-cyan-400 border-2 border-white dark:border-slate-900" />
+                    <span className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 px-1.5 py-0.5 rounded-md shadow-sm">{point.city}</span>
                   </div>
                 </div>
               ))}
 
-              <svg className="absolute inset-0 h-full w-full">
-                <line
-                  x1="18%"
-                  y1="22%"
-                  x2="74%"
-                  y2="44%"
-                  stroke="#22d3ee"
-                  strokeWidth="2"
-                  strokeDasharray="6 6"
-                />
-                <line
-                  x1="28%"
-                  y1="16%"
-                  x2="74%"
-                  y2="44%"
-                  stroke="#22c55e"
-                  strokeWidth="2"
-                  strokeDasharray="6 6"
-                />
-                <line
-                  x1="62%"
-                  y1="72%"
-                  x2="74%"
-                  y2="44%"
-                  stroke="#f59e0b"
-                  strokeWidth="2"
-                  strokeDasharray="6 6"
-                />
+              <svg className="absolute inset-0 h-full w-full pointer-events-none opacity-80 dark:opacity-60">
+                <line x1="18%" y1="22%" x2="74%" y2="44%" stroke="#22d3ee" strokeWidth="2" strokeDasharray="6 6" />
+                <line x1="28%" y1="16%" x2="74%" y2="44%" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 6" />
+                <line x1="62%" y1="72%" x2="74%" y2="44%" stroke="#f59e0b" strokeWidth="2" strokeDasharray="6 6" />
               </svg>
             </div>
           </motion.div>
@@ -402,15 +379,15 @@ export default function HomePage() {
             <motion.div
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl"
+              className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900/50"
             >
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-bold">İnventar Sağlamlığı</h2>
-                  <p className="text-sm text-slate-500">Anbar stabilliyi</p>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">İnventar Sağlamlığı</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Anbar stabilliyi</p>
                 </div>
 
-                <Package className="text-cyan-400" />
+                <Package className="text-cyan-500 dark:text-cyan-400" />
               </div>
 
               <div className="h-[220px]">
@@ -422,14 +399,14 @@ export default function HomePage() {
                     startAngle={180}
                     endAngle={0}
                   >
-                    <RadialBar background dataKey="value" cornerRadius={12} />
+                    <RadialBar background={{ fill: 'currentColor', className: 'text-slate-100 dark:text-slate-800' }} dataKey="value" cornerRadius={12} />
                   </RadialBarChart>
                 </ResponsiveContainer>
               </div>
 
               <div className="-mt-24 text-center">
-                <h2 className="text-5xl font-black">78%</h2>
-                <p className="text-slate-500">Optimal Stok</p>
+                <h2 className="text-5xl font-black text-slate-900 dark:text-white">78%</h2>
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Optimal Stok</p>
               </div>
             </motion.div>
 
@@ -437,35 +414,35 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="rounded-3xl border border-red-500/20 bg-red-500/10 p-6 backdrop-blur-xl"
+              className="rounded-3xl border border-red-200 bg-red-50 p-6 dark:border-red-950/40 dark:bg-red-950/20"
             >
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <AlertTriangle className="animate-pulse text-red-400" />
+                  <AlertTriangle className="animate-pulse text-red-500 dark:text-red-400" />
                   <div>
-                    <h2 className="font-bold">Kritik Xəbərdarlıqlar</h2>
-                    <p className="text-sm text-red-200/70">
+                    <h2 className="font-bold text-red-900 dark:text-red-200">Kritik Xəbərdarlıqlar</h2>
+                    <p className="text-sm text-red-700/80 dark:text-red-400/70">
                       Təcili əməliyyat riskləri
                     </p>
                   </div>
                 </div>
 
-                <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-300">
+                <span className="rounded-full bg-red-200 px-2 py-1 text-xs font-semibold text-red-800 dark:bg-red-500/20 dark:text-red-300">
                   3 Aktiv
                 </span>
               </div>
 
               <div className="space-y-3">
-                <div className="rounded-2xl border border-white/5 bg-slate-100/80 p-3">
-                  <p className="font-medium">Milk SKU #204</p>
-                  <p className="text-sm text-slate-500">
+                <div className="rounded-2xl border border-red-100 bg-white p-3 dark:border-red-900/30 dark:bg-slate-900/60">
+                  <p className="font-semibold text-slate-900 dark:text-white">Milk SKU #204</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     Stok səviyyəsi limitdən aşağıdır
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-white/5 bg-slate-100/80 p-3">
-                  <p className="font-medium">Gecikmiş Çatdırılma</p>
-                  <p className="text-sm text-slate-500">
+                <div className="rounded-2xl border border-red-100 bg-white p-3 dark:border-red-900/30 dark:bg-slate-900/60">
+                  <p className="font-semibold text-slate-900 dark:text-white">Gecikmiş Çatdırılma</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     Net-Tech MMC 2 saat gecikib
                   </p>
                 </div>
@@ -478,42 +455,40 @@ export default function HomePage() {
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 backdrop-blur-xl"
+            className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900/50"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold">Ən Yaxşı Təchizatçı</h2>
-                <p className="text-sm text-slate-500">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Ən Yaxşı Təchizatçı</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Performans və etibarlılıq göstəriciləri
                 </p>
               </div>
 
-              <div className="flex items-center gap-1 text-amber-400">
-                <Star className="h-4 w-4 fill-amber-400" />
-                <Star className="h-4 w-4 fill-amber-400" />
-                <Star className="h-4 w-4 fill-amber-400" />
-                <Star className="h-4 w-4 fill-amber-400" />
-                <Star className="h-4 w-4 fill-amber-400" />
+              <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="h-4 w-4 fill-current" />
+                ))}
               </div>
             </div>
 
-            <div className="mb-5 rounded-2xl bg-slate-100/80 p-4">
-              <h3 className="text-lg font-bold">Net-Tech MMC</h3>
-              <p className="text-sm text-slate-500">
-                Son çatdırılma uğur faizi: 98.7%
+            <div className="mb-5 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/40">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Net-Tech MMC</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Son çatdırılma uğur faizi: <span className="font-semibold text-emerald-600 dark:text-emerald-400">98.7%</span>
               </p>
             </div>
 
             <div className="h-[260px]">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart outerRadius={90} data={supplierRadar}>
-                  <PolarGrid stroke="#cbd5e1" />
-                  <PolarAngleAxis dataKey="subject" stroke="#cbd5e1" />
+                  <PolarGrid stroke="currentColor" className="text-slate-200 dark:text-slate-800" />
+                  <PolarAngleAxis dataKey="subject" stroke="currentColor" className="text-slate-400 dark:text-slate-500" />
                   <Radar
                     dataKey="A"
                     stroke="#22d3ee"
                     fill="#06b6d4"
-                    fillOpacity={0.5}
+                    fillOpacity={0.4}
                   />
                 </RadarChart>
               </ResponsiveContainer>
@@ -524,61 +499,38 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08 }}
-            className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-cyan-500/20 to-emerald-500/10 p-6 backdrop-blur-xl"
+            className="rounded-3xl border border-slate-200 bg-gradient-to-br from-cyan-500/5 to-emerald-500/5 p-6 dark:border-slate-800/80 dark:from-cyan-950/10 dark:to-emerald-950/10"
           >
             <div className="mb-6">
-              <h2 className="text-2xl font-black">
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white">
                 AI Proqnoz və Data Storytelling
               </h2>
 
-              <p className="mt-2 text-slate-600">
+              <p className="mt-2 text-slate-600 dark:text-slate-300">
                 Demand is increasing rapidly in Bakı region. Current trend suggests
                 inventory pressure within the next 48 hours.
               </p>
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200/80 bg-slate-100/80 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm text-slate-500">
-                    Tələb Proqnoz Dəqiqliyi
-                  </span>
+              {[
+                { title: 'Tələb Proqnoz Dəqiqliyi', value: '94%', width: 'w-[94%]', color: 'bg-emerald-500' },
+                { title: 'Təchizatçı Effektivliyi', value: '88%', width: 'w-[88%]', color: 'bg-cyan-500' },
+                { title: 'Marşrut Optimizasiyası', value: '76%', width: 'w-[76%]', color: 'bg-amber-500' }
+              ].map((item, i) => (
+                <div key={i} className="rounded-2xl border border-slate-100 bg-white p-4 dark:border-slate-800/40 dark:bg-slate-900/40">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {item.title}
+                    </span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{item.value}</span>
+                  </div>
 
-                  <span className="font-bold text-emerald-400">94%</span>
+                  <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div className={`h-2 ${item.width} rounded-full ${item.color}`} />
+                  </div>
                 </div>
-
-                <div className="h-2 rounded-full bg-slate-100">
-                  <div className="h-2 w-[94%] rounded-full bg-emerald-400" />
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200/80 bg-slate-100/80 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm text-slate-500">
-                    Təchizatçı Effektivliyi
-                  </span>
-
-                  <span className="font-bold text-cyan-400">88%</span>
-                </div>
-
-                <div className="h-2 rounded-full bg-slate-100">
-                  <div className="h-2 w-[88%] rounded-full bg-cyan-400" />
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200/80 bg-slate-100/80 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm text-slate-500">
-                    Marşrut Optimizasiyası
-                  </span>
-
-                  <span className="font-bold text-amber-400">76%</span>
-                </div>
-
-                <div className="h-2 rounded-full bg-slate-100">
-                  <div className="h-2 w-[76%] rounded-full bg-amber-400" />
-                </div>
-              </div>
+              ))}
             </div>
           </motion.div>
         </div>
