@@ -53,9 +53,9 @@ export async function createDistributionUser(
         if (result) {
           console.log('Distribution Service: Distribution user created in Firebase SQL:', firebaseUid);
           // Map Firebase SQL response to our format
-          const distData = result.distributionUser || result;
-          newDistributionUser.created_at = distData.createdAt || newDistributionUser.created_at;
-          newDistributionUser.updated_at = distData.updatedAt || newDistributionUser.updated_at;
+          const distData = (result as { distributionUser?: any })?.distributionUser || (result as any);
+          newDistributionUser.created_at = distData?.createdAt || newDistributionUser.created_at;
+          newDistributionUser.updated_at = distData?.updatedAt || newDistributionUser.updated_at;
         }
       } else {
         console.warn('Data Connect not initialized, skipping SQL save');
@@ -107,7 +107,7 @@ export async function getDistributionUser(firebaseUid: string): Promise<Distribu
         if (result) {
           console.log('Distribution Service: Distribution user found in Firebase SQL:', firebaseUid);
           // Data Connect returns distribution user data directly from the query
-          const distData = result.distributionUser || result;
+          const distData = (result as { distributionUser?: any }).distributionUser || result;
           return {
             id: crypto.randomUUID(),
             user_id: distData.user?.firebaseUid || firebaseUid,

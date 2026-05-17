@@ -83,6 +83,6 @@ export async function POST(req: NextRequest) {
 }
 
 // Fayl upload üçün body limit-i artır (default 4 MB)
-export const config = {
-  api: { bodyParser: false },
-};
+// export const config = {
+//   api: { bodyParser: false },
+// };
